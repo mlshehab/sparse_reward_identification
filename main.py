@@ -1,6 +1,6 @@
 from dynamics import BasicGridWorld
 from utils.bellman import soft_bellman_operation
-
+from solvers import solve_milp
 import numpy as np
 
 if __name__ == "__main__":
@@ -26,7 +26,11 @@ if __name__ == "__main__":
     
     V,Q,pi = soft_bellman_operation(gw, reward)
 
-    gw.reset(start_state)
+    # gw.reset(start_state)
     
-    trajectory = gw.simulate_trajectory(start_state,pi)
-    gw.visualize_trajectory(trajectory)
+    # trajectory = gw.simulate_trajectory(start_state,pi)
+    # gw.visualize_trajectory(trajectory)
+
+    r, nu, z = solve_milp(gw,pi)
+    non_zero_indices = np.nonzero(z)[0]
+    print(non_zero_indices)
