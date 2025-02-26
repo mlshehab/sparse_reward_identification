@@ -26,13 +26,14 @@ z = model.addVars(T, vtype=GRB.BINARY, name="z")
 model.setObjective(gp.quicksum(z[t] for t in range(T)), GRB.MINIMIZE)
 
 # Constraints
-for t in range(T-1):
+for t in range(T-1): 
     for s in range(n_states):
         for a in range(n_actions):
             model.addConstr(r[t, s, a] == np.log(pi_t[t, s, a]) + gp.quicksum(E[s, a, j] * nu[t, j] for j in range(n_states)) - gamma * gp.quicksum(P[s, a, j] * nu[t+1, j] for j in range(n_states)),
                             name=f"r_def_{t}_{s}_{a}")
     model.addConstr(-M * z[t] <= gp.quicksum(r[t, s, a] - r[t-1, s, a] for s in range(n_states) for a in range(n_actions)), name=f"bigM_lower_{t}")
     model.addConstr(gp.quicksum(r[t, s, a] - r[t-1, s, a] for s in range(n_states) for a in range(n_actions)) <= M * z[t], name=f"bigM_upper_{t}")
+
 
 # Solve the model
 model.optimize()
