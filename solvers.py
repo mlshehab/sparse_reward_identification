@@ -127,7 +127,7 @@ def extract_solution(model, r, nu, T, n_states, n_actions):
         
         for t in range(T):
             for s in range(n_states):
-                for a in range(n_actions):
+                for a in range(n_actions):  
                     r_values[t, s, a] = r[t, s, a].x
             for j in range(n_states):
                 nu_values[t, j] = nu[t, j].x

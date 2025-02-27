@@ -2,6 +2,44 @@ from dynamics import BasicGridWorld
 from utils.bellman import soft_bellman_operation
 from solvers import solve_milp, solve_L_1, solve_L_inf
 import numpy as np
+import pickle
+GEN_DIR_NAME = 'data'
+import time
+import matplotlib.pyplot as plt
+
+def run_methods(gw, pi, methods):
+    results = {}
+    for method in methods:
+        start_time = time.time()
+        if method == "MILP":
+            r, nu, z = solve_milp(gw, pi)
+            results["MILP"] = (r, nu, z)
+            print(f"MILP done in {time.time() - start_time:.2f} seconds")
+        elif method == "L1":
+            r, nu = solve_L_1(gw, pi)
+            results["L1"] = (r, nu)
+            print(f"L1 done in {time.time() - start_time:.2f} seconds")
+        elif method == "Linf":
+            r, nu = solve_L_inf(gw, pi)
+            results["Linf"] = (r, nu)
+            print(f"Linf done in {time.time() - start_time:.2f} seconds")
+    return results
+
+def plot_results(gw, reward, results):
+    plt.figure(figsize=(10, 6))
+    true_reward_avg = np.mean(reward[:, 0, :], axis=1)
+    plt.plot(range(gw.horizon), true_reward_avg, label='True Reward', linestyle='--')
+
+    for method, (r, _) in results.items():
+        reward_avg = np.mean(r[:, 0, :], axis=1)
+        plt.plot(range(gw.horizon), reward_avg, label=method)
+
+    plt.xlabel('Time')
+    plt.ylabel('Average Reward at State 0')
+    plt.title('Average Reward at State 0 over Time for Different Methods')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 if __name__ == "__main__":
     grid_size = 5
@@ -13,48 +51,23 @@ if __name__ == "__main__":
 
     gw = BasicGridWorld(grid_size, wind, discount, horizon, reward)
     
-    reward = np.zeros(shape = (gw.horizon, gw.n_states, gw.n_actions))
-    for t in range(int(gw.horizon/2)):
-        reward[t, 14, :] = 10.0 # 14 is the bottom middle of the grid
-    for t in range(int(gw.horizon/2), gw.horizon):
-        reward[t, 0, :] = 10.0
+    gen_time_varying_weights = pickle.load(open(GEN_DIR_NAME + 
+                                    "/generative_parameters.pickle", 'rb'))['time_varying_weights']
 
-    V,Q,pi = soft_bellman_operation(gw, reward)
+    HOME_STATE = 0
+    WATER_STATE = 14
 
-    import time
+    reward = np.zeros(shape=(gw.horizon, gw.n_states, gw.n_actions))
+    for t in range(gw.horizon):
+        reward[t, HOME_STATE, :] = gen_time_varying_weights[t][0]
+        reward[t, WATER_STATE, :] = gen_time_varying_weights[t][1]
 
-    start_time = time.time()
-    r_MILP, nu_MILP, z_MILP = solve_milp(gw,pi)
-    print(f"MILP done in {time.time() - start_time:.2f} seconds")
+    V, Q, pi = soft_bellman_operation(gw, reward)
 
+    # Choose which methods to run
+    methods_to_run = ["L1", "Linf"]
+    results = run_methods(gw, pi, methods_to_run)
 
-    start_time = time.time()
-    r_L_1, nu_L_1 = solve_L_1(gw,pi)
-    print(f"L1 done in {time.time() - start_time:.2f} seconds")
+    # Plot the results
+    plot_results(gw, reward, results)
 
-    start_time = time.time()
-    r_L_inf, nu_L_inf = solve_L_inf(gw,pi)
-    print(f"Linf done in {time.time() - start_time:.2f} seconds")
-    
-    import matplotlib.pyplot as plt
-
-    reward_MILP = r_MILP[:, 0, :]
-    reward_L_1 = r_L_1[:, 0, :]
-    reward_L_inf = r_L_inf[:, 0, :]
-
-    # Calculate the average rewards over actions for state 0
-    reward_MILP_avg = np.mean(reward_MILP, axis=1)
-    reward_L_1_avg = np.mean(reward_L_1, axis=1)
-    reward_L_inf_avg = np.mean(reward_L_inf, axis=1)
-
-    # Plot the average reward over time
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(gw.horizon), reward_MILP_avg, label='MILP')
-    plt.plot(range(gw.horizon), reward_L_1_avg, label='L1')
-    plt.plot(range(gw.horizon), reward_L_inf_avg, label='Linf')
-    plt.xlabel('Time')
-    plt.ylabel('Average Reward at State 0')
-    plt.title('Average Reward at State 0 over Time for Different Methods')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
