@@ -3,13 +3,7 @@ from gurobipy import GRB
 import numpy as np
 
 def solve_milp(gw, pi):
-    # Retrieve quantities from gw
-    T = gw.horizon  # Time horizon
-    n_states = gw.n_states  # Number of states
-    n_actions = gw.n_actions # Number of actions
-    M = 100  # Large constant for big-M constraints
-    gamma = gw.discount # Discount factor
-    P = gw.P
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     # Create Gurobi model
     model = gp.Model("MILP")
 
@@ -63,3 +57,69 @@ def solve_milp(gw, pi):
         return r_values, nu_values, z_values
     else:
         print("No optimal solution found.")
+
+
+def solve_L_1(gw, pi):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    model = gp.Model("MILP_L1")
+
+    # Decision variables
+    r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+    nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
+    diff = model.addVars(T-1, n_states, n_actions, vtype=GRB.CONTINUOUS, name="diff")
+
+    # Objective: Minimize sum of absolute differences (L1 norm)
+    model.setObjective(gp.quicksum(diff[t, s, a] for t in range(T-1) for s in range(n_states) for a in range(n_actions)), GRB.MINIMIZE)
+
+    # Constraints
+    for t in range(T-1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t, s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)))
+                model.addConstr(diff[t, s, a] >= r[t, s, a] - r[t-1, s, a])
+                model.addConstr(diff[t, s, a] >= -(r[t, s, a] - r[t-1, s, a]))
+
+    model.optimize()
+    return extract_solution(model, r, nu, T, n_states, n_actions)
+
+
+def solve_L_inf(gw, pi):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    model = gp.Model("MILP_Linf")
+
+    # Decision variables
+    r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+    nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
+    norm_vars = model.addVars(T-1, vtype=GRB.CONTINUOUS, name="norm")
+
+    # Objective: Minimize sum of infinity norms (L∞ norm)
+    model.setObjective(gp.quicksum(norm_vars[t] for t in range(T-1)), GRB.MINIMIZE)
+
+    # Constraints
+    for t in range(T-1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t, s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)))
+                model.addConstr(norm_vars[t] >= r[t, s, a] - r[t-1, s, a])
+                model.addConstr(norm_vars[t] >= -(r[t, s, a] - r[t-1, s, a]))
+
+    model.optimize()
+    return extract_solution(model, r, nu, T, n_states, n_actions)
+
+
+def extract_solution(model, r, nu, T, n_states, n_actions):
+    if model.status == GRB.OPTIMAL:
+        r_values = np.zeros((T, n_states, n_actions))
+        nu_values = np.zeros((T, n_states))
+        
+        for t in range(T):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    r_values[t, s, a] = r[t, s, a].x
+            for j in range(n_states):
+                nu_values[t, j] = nu[t, j].x
+        
+        return r_values, nu_values
+    else:
+        print("No optimal solution found.")
+        return None, None
