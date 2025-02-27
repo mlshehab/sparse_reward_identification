@@ -1,6 +1,6 @@
 from dynamics import BasicGridWorld
 from utils.bellman import soft_bellman_operation
-from solvers import solve_milp, solve_L_1, solve_L_inf
+from solvers import solve_milp, solve_L_1, solve_L_inf, solve_L2
 import numpy as np
 import pickle
 GEN_DIR_NAME = 'data'
@@ -23,15 +23,21 @@ def run_methods(gw, pi, methods):
             r, nu = solve_L_inf(gw, pi)
             results["Linf"] = (r, nu)
             print(f"Linf done in {time.time() - start_time:.2f} seconds")
+        elif method == "L2":
+            r, nu = solve_L2(gw, pi)
+            results["L2"] = (r, nu)
+            print(f"L2 done in {time.time() - start_time:.2f} seconds")
     return results
 
 def plot_results(gw, reward, results):
+    print("The shape of reward is", reward.shape)
     plt.figure(figsize=(10, 6))
     true_reward_avg = np.mean(reward[:, 0, :], axis=1)
     plt.plot(range(gw.horizon), true_reward_avg, label='True Reward', linestyle='--')
 
     for method, (r, _) in results.items():
         reward_avg = np.mean(r[:, 0, :], axis=1)
+        reward_avg -= reward_avg[0]  # Adjust to start from 0
         plt.plot(range(gw.horizon), reward_avg, label=method)
 
     plt.xlabel('Time')
@@ -65,7 +71,7 @@ if __name__ == "__main__":
     V, Q, pi = soft_bellman_operation(gw, reward)
 
     # Choose which methods to run
-    methods_to_run = ["L1", "Linf"]
+    methods_to_run = ["L1", "Linf", "L2"]
     results = run_methods(gw, pi, methods_to_run)
 
     # Plot the results
