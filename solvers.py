@@ -5,8 +5,9 @@ import numpy as np
 def solve_milp(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     # Create Gurobi model
+    M = 100
     model = gp.Model("MILP")
-
+    model.setParam('OutputFlag', False)
     # Decision variables
     r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
     nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
@@ -62,11 +63,11 @@ def solve_milp(gw, pi):
 def solve_L_1(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     model = gp.Model("MILP_L1")
-
+    model.setParam('OutputFlag', False)
     # Decision variables
     r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
     nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
-    diff = model.addVars(T-1, n_states, n_actions, vtype=GRB.CONTINUOUS, name="diff")
+    diff = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="diff")
 
     # Objective: Minimize sum of absolute differences (L1 norm)
     model.setObjective(gp.quicksum(diff[t, s, a] for t in range(T-1) for s in range(n_states) for a in range(n_actions)), GRB.MINIMIZE)
@@ -76,6 +77,11 @@ def solve_L_1(gw, pi):
         for s in range(n_states):
             for a in range(n_actions):
                 model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t, s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)))
+               
+
+    for t in range(1,T):
+        for s in range(n_states):
+            for a in range(n_actions):
                 model.addConstr(diff[t, s, a] >= r[t, s, a] - r[t-1, s, a])
                 model.addConstr(diff[t, s, a] >= -(r[t, s, a] - r[t-1, s, a]))
 
@@ -86,11 +92,11 @@ def solve_L_1(gw, pi):
 def solve_L_inf(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     model = gp.Model("MILP_Linf")
-
+    model.setParam('OutputFlag', False)
     # Decision variables
     r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
     nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
-    norm_vars = model.addVars(T-1, vtype=GRB.CONTINUOUS, name="norm")
+    norm_vars = model.addVars(T, vtype=GRB.CONTINUOUS, name="norm")
 
     # Objective: Minimize sum of infinity norms (L∞ norm)
     model.setObjective(gp.quicksum(norm_vars[t] for t in range(T-1)), GRB.MINIMIZE)
@@ -100,8 +106,15 @@ def solve_L_inf(gw, pi):
         for s in range(n_states):
             for a in range(n_actions):
                 model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t, s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)))
+            
+    # Constraints
+    for t in range(1,T):
+        for s in range(n_states):
+            for a in range(n_actions):
+                
                 model.addConstr(norm_vars[t] >= r[t, s, a] - r[t-1, s, a])
                 model.addConstr(norm_vars[t] >= -(r[t, s, a] - r[t-1, s, a]))
+
 
     model.optimize()
     return extract_solution(model, r, nu, T, n_states, n_actions)
