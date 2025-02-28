@@ -12,12 +12,12 @@ import os
 path_to_dynamic_irl = '~\Desktop'
 repo2_path = os.path.expanduser(path_to_dynamic_irl)  # Adjust path if necessary
 sys.path.append(repo2_path)
+
 # print(sys.path)
 # sys.path.append('/home/mlshehab/Desktop/dynamic_irl')
 import dynamic_irl
 
 from dynamic_irl.src.envs  import  gridworld
-
 
 
 
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     P_a = env.get_transition_mat()
 
     P = [P_a[:,:,0], P_a[:,:,1], P_a[:,:,2], P_a[:,:,3], P_a[:,:,4]]
-    
+
     gw.P = P
 
     HOME_STATE = 0
@@ -101,13 +101,99 @@ if __name__ == "__main__":
     V, Q, pi = soft_bellman_operation(gw, reward)
 
 
-    # # Choose which methods to run
-    # methods_to_run = ["L1", "L2", "Linf"]
-    # results = run_methods(gw, pi, methods_to_run)
+    path_to_expert_trajectories = os.path.join(
+    os.path.expanduser('~'),
+    'Desktop',
+    'dynamic_irl',
+    'data',
+    'simulated_gridworld_data',
+    'exclude_explore_share_weights_1',
+    'expert_trajectories.pickle'
+)   
+    rec_dir_name = os.path.join(
+        os.path.expanduser('~'),
+        'Desktop',
+        'dynamic_irl',
+        'recovered_parameters',
+        'gridworld_recovered_params',
+        'exclude_explore_1',
+        'maps_2_lr_0.001_0.05'
+    )
 
-    # # reward_L1 = results["L1"][0]
-    # # reward_L2 = results["L2"][0]
-    # # reward_Linf = results["Linf"][0]
+    rec_goal_maps = np.load(rec_dir_name + "\goal_maps_trajs_200_seed_1_iters_100.npy")[-1]
+
+
+    # load recovered parameters for this seed
+    rec_weights = np.load(rec_dir_name + "\weights_trajs_200_seed_1_iters_100.npy")[-1]
+
+    rec_rewards = np.repeat((rec_weights.T @ rec_goal_maps)[:, :, np.newaxis], gw.n_actions, axis=2)
+    rec_rewards = np.concatenate((rec_rewards, rec_rewards[-1:, :, :]), axis=0)
+
+    
+    print("The shape of rec_rewards is", rec_rewards.shape)
+
+    def compute_and_print_log_likelihood(gw, reward, path_to_expert_trajectories):
+        V, Q, pi = soft_bellman_operation(gw, reward)
+
+        trajectories = pickle.load(open(path_to_expert_trajectories, 'rb'))
+
+        # concatenate expert trajectories
+        assert(len(trajectories) > 0), "no expert trajectories found!"
+        state_action_pairs = []
+        for num, traj in enumerate(trajectories):
+            states = np.array(traj['states'])[:, np.newaxis]
+            actions = np.array(traj['actions'])[:, np.newaxis]
+            if len(states) == len(actions) + 1:
+                states = np.array(traj['states'][:-1])[:, np.newaxis]
+            assert len(states) == len(actions), "states and action sequences don't have the same length"
+            T = len(states)
+            state_action_pairs_this_traj = np.concatenate((states, actions), axis=1)
+            assert state_action_pairs_this_traj.shape[0] == len(states), "error in concatenation of s,a,s' tuples"
+            assert state_action_pairs_this_traj.shape[1] == 2, "states and actions are not integers?"
+            state_action_pairs.append(state_action_pairs_this_traj)
+
+        # compute the log likelihood for all trajectories
+        num_trajectories = len(state_action_pairs)
+        log_likelihood = 0
+        for i in range(num_trajectories):
+            states, actions = state_action_pairs[i][:, 0], state_action_pairs[i][:, 1]
+            log_likelihood += sum(np.log(pi[range(T), states, actions]))
+
+        print("The log likelihood is", log_likelihood)
+
+    
+
+
+
+
+    # now i need to plot the expert trajectories
+    # plt.figure(figsize=(10, 6))
+    # # for trajectory in expert_trajectories:
+    # plt.plot(expert_trajectories[0]['states'])
+    # plt.show()
+
+
+
+
+
+    # Choose which methods to run
+    methods_to_run = ["L1", "L2", "Linf"]
+    results = run_methods(gw, pi, methods_to_run)
+
+    reward_L1 = results["L1"][0]
+    reward_L2 = results["L2"][0]
+    reward_Linf = results["Linf"][0]
+
+    # compute the log likelihood for the recovered rewards
+    compute_and_print_log_likelihood(gw, rec_rewards, path_to_expert_trajectories)
+    # compute the log likelihood for the true rewards
+    compute_and_print_log_likelihood(gw, reward, path_to_expert_trajectories)
+    compute_and_print_log_likelihood(gw, reward_L1, path_to_expert_trajectories)
+    compute_and_print_log_likelihood(gw, reward_L2, path_to_expert_trajectories)
+    compute_and_print_log_likelihood(gw, reward_Linf, path_to_expert_trajectories)
+
+
+
     # # print("The shape of reward_L1 is", reward_L1.shape)
 
     # # V_L1, Q_L1, pi_L1 = soft_bellman_operation(gw, reward_L1)
