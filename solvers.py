@@ -59,6 +59,50 @@ def solve_milp(gw, pi):
     else:
         print("No optimal solution found.")
 
+def solve_greedy_linear(gw, pi):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+
+    tau = 0
+    switch_times = []
+    rewards_nu_list = []
+    for i in range(T-1):
+        ## Is feasible?
+        model = gp.Model("Feasible")
+        model.setParam('OutputFlag', False)
+        model.setObjective(0, GRB.MINIMIZE)
+        r = model.addVars(n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+        nu = model.addVars(i+1-tau + 1, n_states, vtype=GRB.CONTINUOUS, name="nu")
+
+        ### Reward constraints
+        for t in range(tau,i+1):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    model.addConstr(r[s, a] == np.log(pi[t, s, a]) + nu[t-tau,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-tau, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+        ### Nu consistency constraints
+        # if len(rewards_nu_list) > 0:
+        #     for s in range(n_states):
+        #         model.addConstr(nu[0,s] == rewards_nu_list[-1][1][-1,s], name=f"nu_consistency_{tau}_{switch_times[-1]}")
+
+        model.optimize()
+        if model.Status == GRB.OPTIMAL:
+            r_values = np.zeros((n_states, n_actions))
+            nu_values = np.zeros((T, n_states))
+            for t in range(tau,i+1):
+                for s in range(n_states):
+                    for a in range(n_actions):
+                        r_values[s, a] = r[s, a].x
+                for j in range(n_states):
+                    nu_values[t-tau, j] = nu[t-tau, j].x
+        else:
+            switch_times += [i]
+            tau = i
+            rewards_nu_list.append((r_values,nu_values))
+
+    if tau < T-2:
+        switch_times += [T-1]
+        rewards_nu_list.append((r_values,nu_values))    
+
+    return switch_times, rewards_nu_list
 
 def solve_L_1(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
