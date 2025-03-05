@@ -1,4 +1,5 @@
 import gurobipy as gp
+import cvxpy as cp
 from gurobipy import GRB
 import numpy as np
 
@@ -64,35 +65,96 @@ def solve_greedy_linear(gw, pi):
 
     tau = 0
     switch_times = []
-    rewards_nu_list = []
-    for i in range(T-1):
+    # rewards_nu_list = []
+    i = 0
+
+    r_values = np.zeros((T, n_states, n_actions))
+    nu_values = np.zeros((T, n_states))
+    
+    while i < T-1:
         ## Is feasible?
         model = gp.Model("Feasible")
         model.setParam('OutputFlag', False)
         model.setObjective(0, GRB.MINIMIZE)
         r = model.addVars(n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
-        nu = model.addVars(i+1-tau + 1, n_states, vtype=GRB.CONTINUOUS, name="nu")
+        nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
 
         ### Reward constraints
         for t in range(tau,i+1):
             for s in range(n_states):
                 for a in range(n_actions):
-                    model.addConstr(r[s, a] == np.log(pi[t, s, a]) + nu[t-tau,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-tau, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+                    model.addConstr(r[s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+
+        # if len(rewards_nu_list) > 0:
+        #     for s in range(n_states):
+        #         for a in range(n_actions):
+        #             model.addConstr(r[s, a] == np.log(pi[tau, s, a]) + rewards_nu_list[-1][1][tau,s] - gamma * gp.quicksum(P[a][s, j] * nu[tau+1, j] for j in range(n_states)), name=f"r_def_{tau}_{s}_{a}")
+        # else:
+        #     for s in range(n_states):
+        #         for a in range(n_actions):
+        #             model.addConstr(r[s, a] == np.log(pi[tau, s, a]) + nu[tau,s] - gamma * gp.quicksum(P[a][s, j] * nu[tau+1, j] for j in range(n_states)), name=f"r_def_{tau}_{s}_{a}")
+
+        model.optimize()
+        if model.Status == GRB.OPTIMAL:
+            # r_values = np.zeros((n_states, n_actions))
+            # nu_values = np.zeros((T, n_states))
+            for t in range(tau,i+2):
+                for s in range(n_states):
+                    for a in range(n_actions):
+                        r_values[t, s, a] = r[s, a].x
+                for j in range(n_states):
+                    nu_values[t, j] = nu[t, j].x
+            i += 1
+        else:
+            switch_times += [i]
+            tau = i
+            print(f"Infeasibility found. New tau={tau}")
+            # rewards_nu_list.append((r_values,nu_values))
+        
+
+    # if tau < T-2:
+        # switch_times += [T-1]
+        # rewards_nu_list.append((r_values,nu_values))    
+
+    return r_values, nu_values, switch_times
+
+def solve_greedy_linear_cvxpy(gw, pi):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+
+    tau = 0
+    switch_times = []
+    rewards_nu_list = []
+    for i in range(T-1):
+        ## Is feasible?
+
+        r = cp.Variable((n_states, n_actions), nonneg=True)
+        nu = cp.Variable((i+1-tau + 1, n_states), nonneg=True, name="nu")
+
+        ### Reward constraints
+        constraints = []
+        for t in range(tau,i+1):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    constraints.append(r[s, a] == (np.log(pi[t, s, a]) + nu[t-tau, s] -
+                                                 gamma * cp.sum(cp.multiply(P[a][s, :], nu[t+1-tau,:]))))
         ### Nu consistency constraints
         # if len(rewards_nu_list) > 0:
         #     for s in range(n_states):
         #         model.addConstr(nu[0,s] == rewards_nu_list[-1][1][-1,s], name=f"nu_consistency_{tau}_{switch_times[-1]}")
 
-        model.optimize()
-        if model.Status == GRB.OPTIMAL:
+        objective = cp.Minimize(0)
+        problem = cp.Problem(objective, constraints)
+        problem.solve(verbose=False)
+
+        if problem.status in ["optimal", "feasible"]:
             r_values = np.zeros((n_states, n_actions))
-            nu_values = np.zeros((T, n_states))
+            nu_values = np.zeros((i+1-tau, n_states))
             for t in range(tau,i+1):
                 for s in range(n_states):
                     for a in range(n_actions):
-                        r_values[s, a] = r[s, a].x
+                        r_values[s, a] = r[s, a].value
                 for j in range(n_states):
-                    nu_values[t-tau, j] = nu[t-tau, j].x
+                    nu_values[t-tau, j] = nu[t-tau, j].value
         else:
             switch_times += [i]
             tau = i
