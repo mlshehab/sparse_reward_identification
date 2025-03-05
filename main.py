@@ -4,6 +4,7 @@ from solvers import solve_milp
 import numpy as np
 
 if __name__ == "__main__":
+    
     grid_size = 5
     wind = 0.1
     discount = 0.9
