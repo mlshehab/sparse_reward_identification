@@ -75,7 +75,8 @@ def soft_bellman_operation(env, reward):
 #         next_values_s_a = T @ V[t + 1, :]
 #         next_values_s_a = next_values_s_a.reshape(n_states,n_actions)
         for a in range(n_actions):
-            Ta = env.transition_probability[:,a,:]
+            # Ta = env.transition_probability[:,a,:]
+            Ta = env.P[a]
             next_values_s_a = Ta@V[t + 1, :]
             Q[t, :, a] = reward[t, :, a] + discount * next_values_s_a
             
