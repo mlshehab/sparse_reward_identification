@@ -4,7 +4,7 @@ import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
-from solvers import solve_milp, solve_greedy_linear, solve_greedy_linear_cvxpy
+from solvers import solve_milp, solve_greedy_backward, solve_greedy_linear_cvxpy
 from dynamics import BasicGridWorld
 from utils.bellman import soft_bellman_operation
 
@@ -30,16 +30,9 @@ def test_greedy_linear():
             rewards = np.zeros((gw.horizon, gw.n_states)) #array of size Txnum_states
             rewards = rewards.T
 
-            # r_map = np.reshape(np.array(rewards[:, 0]), (gw.grid_size, gw.grid_size), order='F')
-            # r_map = 0
-            # env = gridworld.GridWorld(r_map, {},)  # instantiate
-            # gridworld environment.  {} indicates that there are no terminal states
-            # P_a = env.get_transition_mat()
-            # P = [P_a[:,:,0], P_a[:,:,1], P_a[:,:,2], P_a[:,:,3], P_a[:,:,4]]
-
-            # gw.P = P
 
             reward_switch_times = sorted(np.random.choice(gw.horizon-3, number_of_switches) + 1) ### Ensures the switches do not occur at the last and first steps
+            print("True reward switch times: ", reward_switch_times)
             reward_switch_intervals = [0] + reward_switch_times + [gw.horizon-1]
             reward_functions = [np.random.uniform(0,1,(gw.n_states,gw.n_actions)) for _ in range(number_of_switches + 1)]
 
@@ -55,38 +48,23 @@ def test_greedy_linear():
             print(r_milp.shape, nu_milp.shape)
             print(f"MILP done in {time.time() - start_time:.2f} seconds")
 
+            if check_feasibility(gw, pi, r_milp, nu_milp):
+                print("MILP solution is feasible")
+            else:
+                print("MILP solution is infeasible")
+
+
+            print("MILP:", [index for index, value in enumerate(z) if value == 1])
+
             start_time = time.time()
-            r_greedy, nu_greedy, switch_times  = solve_greedy_linear(gw,pi)
+            r_greedy, nu_greedy, switch_times  = solve_greedy_backward(gw,pi)
+            print(f"Greedy-Linear done in {time.time() - start_time:.2f} seconds")
 
-            # print(r_milp[:,0,:])
-            # print(r_greedy[:,0,:])
-            # print(nu_greedy)
 
-            if check_feasibility(gw, pi, r_greedy):
+            if check_feasibility(gw, pi, r_greedy, nu_greedy):
                 print("Greedy solution is feasible")
             else:
                 print("Greedy solution is infeasible")
-
-
-
-
-            # r = np.zeros((gw.horizon, gw.n_states, gw.n_states))
-            # nu = np.zeros((gw.horizon, gw.n_states))
-            switch_times_aux = [0] + switch_times
-            # print(switch_times)
-            # print(len(switch_times), len(rewards_nu_list))
-
-            # for k,  r_nu_tuple in enumerate(rewards_nu_list):
-                # r_greedy, nu_greedy = r_nu_tuple
-                # print(r_greedy.shape)
-                # print(f"Nu values of interval {k}")
-                # print(nu_greedy)
-            #     r[switch_times_aux[k]:switch_times_aux[k+1],:,:] = r_greedy
-            #     nu[switch_times_aux[k]:switch_times_aux[k+1],:] = nu_greedy
-            # feasible = check_feasibility(gw, pi, r, nu)
-            # print(f"Greedy solution is feasible: {feasible}")
-
-            print(f"Greedy-Linear done in {time.time() - start_time:.2f} seconds")
 
 
             print("Optimal switch times found:")
@@ -94,22 +72,12 @@ def test_greedy_linear():
             print("Greedy:", switch_times)
 
             print("Comparing reward values")
-            switch_times = [0] + switch_times
-            # for k,  r_nu_tuple in enumerate(rewards_nu_list):
-                # r_greedy, nu_greedy = r_nu_tuple
-                # print(f"MILP Reward for interval {k}")
-                # print(r_milp[switch_times[k]:switch_times[k+1]])
-                # print(f"Greedy Reward for interval {k}")
-                # print(r_greedy)
 
-                # if np.isclose(r_milp[switch_times[k]:switch_times[k+1]], r_greedy):
-                #     print(f"Rewards close for interval {k}")
-                # else:
-                #     print(f"Rewards not close for interval {k}")
-
+            # print(r_greedy)
+            # print(r_milp)
         
 
-def check_feasibility(gw, pi, r):
+def check_feasibility_reward(gw, pi, r):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
 
     model = gp.Model("MILP")
@@ -134,16 +102,24 @@ def check_feasibility(gw, pi, r):
     return model.status == GRB.OPTIMAL
 
 
-
-    # # Constraints
-    # for t in range(T-1):
-    #     for s in range(n_states):
-    #         for a in range(n_actions):
-    #             if not np.isclose(r[t, s, a],np.log(pi[t, s, a]) + nu[t,s] 
-    #                               - gamma * np.sum([P[a][s, j] * nu[t+1, j] for j in range(n_states)])):
-    #                 return False
-    #     print(f"Time {t} is feasible")
-    # return True     
+def check_feasibility(gw, pi, r, nu):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    # Constraints
+    for t in range(T-1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                if not np.isclose(r[t, s, a],np.log(pi[t, s, a]) + nu[t,s] 
+                                  - gamma * np.sum([P[a][s, j] * nu[t+1, j] for j in range(n_states)])):
+                    return False
+        print(f"Time {t} is feasible")
+    
+    # Add constraints for the last time step
+    for s in range(n_states):
+        for a in range(n_actions):
+            if not np.isclose(r[T-1, s, a], np.log(pi[T-1, s, a]) + nu[T-1, s]):
+                return False
+    print(f"Time {T-1} is feasible")
+    return True     
                 
 if __name__ == "__main__":
     test_greedy_linear()

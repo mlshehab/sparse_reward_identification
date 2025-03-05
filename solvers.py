@@ -26,7 +26,12 @@ def solve_milp(gw, pi):
             for a in range(n_actions):
                 model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)),
                                 name=f"r_def_{t}_{s}_{a}")
-    
+
+     # Add constraints for the last time step
+    for s in range(n_states):
+        for a in range(n_actions):
+             model.addConstr(r[T-1, s, a] == np.log(pi[T-1, s, a]) + nu[T-1, s]  )
+
     # Calculate the infinity norm using auxiliary variables
     for t in range(1, T):
         for s in range(n_states):
@@ -60,61 +65,66 @@ def solve_milp(gw, pi):
     else:
         print("No optimal solution found.")
 
-def solve_greedy_linear(gw, pi):
+def solve_greedy_backward(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
 
-    tau = 0
+    tau = T-1
     switch_times = []
-    # rewards_nu_list = []
-    i = 0
+
+    i = T-1
 
     r_values = np.zeros((T, n_states, n_actions))
     nu_values = np.zeros((T, n_states))
     
-    while i < T-1:
+    while i >= 0:
+        print(f"Testing from {i} to {T-1}. {tau=}")
         ## Is feasible?
         model = gp.Model("Feasible")
         model.setParam('OutputFlag', False)
         model.setObjective(0, GRB.MINIMIZE)
-        r = model.addVars(n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+        r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
         nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
 
         ### Reward constraints
-        for t in range(tau,i+1):
+        for t in range(i,T-1):
             for s in range(n_states):
                 for a in range(n_actions):
-                    model.addConstr(r[s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+                    model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
 
-        # if len(rewards_nu_list) > 0:
-        #     for s in range(n_states):
-        #         for a in range(n_actions):
-        #             model.addConstr(r[s, a] == np.log(pi[tau, s, a]) + rewards_nu_list[-1][1][tau,s] - gamma * gp.quicksum(P[a][s, j] * nu[tau+1, j] for j in range(n_states)), name=f"r_def_{tau}_{s}_{a}")
-        # else:
-        #     for s in range(n_states):
-        #         for a in range(n_actions):
-        #             model.addConstr(r[s, a] == np.log(pi[tau, s, a]) + nu[tau,s] - gamma * gp.quicksum(P[a][s, j] * nu[tau+1, j] for j in range(n_states)), name=f"r_def_{tau}_{s}_{a}")
+        # Add constraints for the last time step
+        for s in range(n_states):
+            for a in range(n_actions):
+                model.addConstr(r[T-1, s, a] == np.log(pi[T-1, s, a]) + nu[T-1, s]  )
+
+        ### Reward Consistency constraints
+        for t in range(i,tau-1):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    model.addConstr(r[t,s, a] == r[tau-1,s,a], name=f"r_def_{t}_{s}_{a}")        
+ 
+        ### Reward Other Intervals Consistency constraints
+        for t in range(tau,T-1):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    model.addConstr(r[t,s, a] == r_values[t,s,a], name=f"r_def_{t}_{s}_{a}")               
+
 
         model.optimize()
         if model.Status == GRB.OPTIMAL:
             # r_values = np.zeros((n_states, n_actions))
             # nu_values = np.zeros((T, n_states))
-            for t in range(tau,i+2):
+            for t in range(i,T):
                 for s in range(n_states):
                     for a in range(n_actions):
-                        r_values[t, s, a] = r[s, a].x
+                        r_values[t, s, a] = r[t, s, a].x
                 for j in range(n_states):
                     nu_values[t, j] = nu[t, j].x
-            i += 1
+            i -= 1
         else:
-            switch_times += [i]
-            tau = i
+            switch_times += [i+1]
+            tau = i+1
             print(f"Infeasibility found. New tau={tau}")
-            # rewards_nu_list.append((r_values,nu_values))
-        
 
-    # if tau < T-2:
-        # switch_times += [T-1]
-        # rewards_nu_list.append((r_values,nu_values))    
 
     return r_values, nu_values, switch_times
 
