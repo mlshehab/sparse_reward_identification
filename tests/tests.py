@@ -4,7 +4,7 @@ import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
-from solvers import solve_milp, solve_greedy_backward, solve_greedy_linear_cvxpy
+from solvers import solve_milp, solve_greedy_backward, solve_greedy_backward_bisection
 from dynamics import BasicGridWorld
 from utils.bellman import soft_bellman_operation
 
@@ -58,7 +58,7 @@ def test_greedy_linear():
             print("MILP:", [index for index, value in enumerate(z) if value == 1])
 
             start_time = time.time()
-            r_greedy, nu_greedy, switch_times  = solve_greedy_backward(gw,pi)
+            r_greedy, nu_greedy, switch_times  = solve_greedy_backward_bisection(gw,pi)
             print(f"Greedy-Linear done in {time.time() - start_time:.2f} seconds")
 
 
