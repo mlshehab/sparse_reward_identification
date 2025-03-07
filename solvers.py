@@ -65,6 +65,70 @@ def solve_milp(gw, pi):
     else:
         print("No optimal solution found.")
 
+def solve_greedy_backward_alpha(gw, pi, U):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    n_features = len(U)
+
+    tau = T
+    switch_times = []
+
+    i = T-1
+
+    alpha_values = np.zeros((T, n_features))
+    nu_values = np.zeros((T, n_states))
+
+    while i >= 0:
+        print(f"Testing from {i} to {T-1}. {tau=}")
+        ## Is feasible?
+        model = gp.Model("Feasible")
+        model.setParam("NumericFocus", 1)
+        model.setParam('OutputFlag', False)
+        model.setObjective(0, GRB.MINIMIZE)
+        alpha = model.addVars(T, n_features, vtype=GRB.CONTINUOUS, name="r")
+        nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
+
+        ### Reward constraints
+        for t in range(i,T-1):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    model.addConstr(gp.quicksum(alpha[t,j] * U[j][s,a] for j in range(n_features)) == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+
+        # Add constraints for the last time step
+        for s in range(n_states):
+            for a in range(n_actions):
+                model.addConstr(gp.quicksum(alpha[T-1,j] * U[j][s,a] for j in range(n_features)) == np.log(pi[T-1, s, a]) + nu[T-1, s]  )
+
+        ### Reward Consistency constraints
+        for t in range(i,tau-1):
+            for j in range(n_features):
+                model.addConstr(alpha[t,j] == alpha[tau-1,j], name=f"r_def_{t}_{s}_{a}")        
+ 
+        ### Reward Other Intervals Consistency constraints
+        for t in range(tau,T):
+            for j in range(n_features):
+                model.addConstr(alpha[t,j] == alpha_values[t,j], name=f"r_def_{t}_{s}_{a}")               
+
+        model.optimize()
+        if model.Status == GRB.OPTIMAL:
+            for t in range(T):
+                for j in range(n_features):
+                    alpha_values[t, j] = alpha[t,j].x
+                for j in range(n_states):
+                    nu_values[t, j] = nu[t, j].x
+            i -= 1
+        else:
+            print(model.status)
+            switch_times += [i+1]
+            tau = i+1
+            print(f"Infeasibility found. New tau={tau}")
+
+    r_values = np.zeros(shape=(T, n_states, n_actions))
+    for t in range(T):
+        for s in range(n_states):
+            for a in range(n_actions):
+                r_values[t,s,a] = np.sum([alpha_values[t,j]*U[j][s,a] for j in range(n_features)])
+    return r_values, alpha_values, nu_values, switch_times[::-1]
+
 def solve_greedy_backward(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
 
