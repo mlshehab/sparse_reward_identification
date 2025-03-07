@@ -27,10 +27,10 @@ def solve_milp(gw, pi):
                 model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)),
                                 name=f"r_def_{t}_{s}_{a}")
 
-     # Add constraints for the last time step
-    for s in range(n_states):
-        for a in range(n_actions):
-             model.addConstr(r[T-1, s, a] == np.log(pi[T-1, s, a]) + nu[T-1, s]  )
+    # Add constraints for the last time step
+        for s in range(n_states):
+            for a in range(n_actions):
+                model.addConstr(r[T-1, s, a] == np.log(pi[T-1, s, a]) + nu[T-1, s]  )
 
     # Calculate the infinity norm using auxiliary variables
     for t in range(1, T):
@@ -68,18 +68,19 @@ def solve_milp(gw, pi):
 def solve_greedy_backward(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
 
-    tau = T-1
+    tau = T
     switch_times = []
 
     i = T-1
 
     r_values = np.zeros((T, n_states, n_actions))
     nu_values = np.zeros((T, n_states))
-    
+
     while i >= 0:
         print(f"Testing from {i} to {T-1}. {tau=}")
         ## Is feasible?
         model = gp.Model("Feasible")
+        model.setParam("NumericFocus", 1)
         model.setParam('OutputFlag', False)
         model.setObjective(0, GRB.MINIMIZE)
         r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
@@ -103,17 +104,14 @@ def solve_greedy_backward(gw, pi):
                     model.addConstr(r[t,s, a] == r[tau-1,s,a], name=f"r_def_{t}_{s}_{a}")        
  
         ### Reward Other Intervals Consistency constraints
-        for t in range(tau,T-1):
+        for t in range(tau,T):
             for s in range(n_states):
                 for a in range(n_actions):
                     model.addConstr(r[t,s, a] == r_values[t,s,a], name=f"r_def_{t}_{s}_{a}")               
 
-
         model.optimize()
         if model.Status == GRB.OPTIMAL:
-            # r_values = np.zeros((n_states, n_actions))
-            # nu_values = np.zeros((T, n_states))
-            for t in range(i,T):
+            for t in range(T):
                 for s in range(n_states):
                     for a in range(n_actions):
                         r_values[t, s, a] = r[t, s, a].x
@@ -121,12 +119,13 @@ def solve_greedy_backward(gw, pi):
                     nu_values[t, j] = nu[t, j].x
             i -= 1
         else:
+            print(model.status)
             switch_times += [i+1]
             tau = i+1
             print(f"Infeasibility found. New tau={tau}")
 
-
     return r_values, nu_values, switch_times
+
 
 def solve_greedy_linear_cvxpy(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P

@@ -13,17 +13,18 @@ from utils.bellman import soft_bellman_operation
 NUMBER_OF_EXPERIMENTS = 1
 
 def test_greedy_linear():
+    np.random.seed(1)
     '''
     This function compares the solutions found by Greedy-Linear to MILP over some randomly generated MDPs
     '''
-    grid_size = 3#5
+    grid_size = 5
     wind = 0.1
     discount = 0.9
-    horizon = 10#50
+    horizon = 50
     reward = 1
     start_state = 10
 
-    for number_of_switches in [2]:
+    for number_of_switches in [2,5]:
         for _ in range(NUMBER_OF_EXPERIMENTS):
             gw = BasicGridWorld(grid_size, wind, discount, horizon, reward)
             # now obtain time-varying reward maps
@@ -33,7 +34,7 @@ def test_greedy_linear():
 
             reward_switch_times = sorted(np.random.choice(gw.horizon-3, number_of_switches) + 1) ### Ensures the switches do not occur at the last and first steps
             print("True reward switch times: ", reward_switch_times)
-            reward_switch_intervals = [0] + reward_switch_times + [gw.horizon-1]
+            reward_switch_intervals = [0] + reward_switch_times + [gw.horizon]
             reward_functions = [np.random.uniform(0,1,(gw.n_states,gw.n_actions)) for _ in range(number_of_switches + 1)]
 
             reward = np.zeros(shape=(gw.horizon, gw.n_states, gw.n_actions))
@@ -71,7 +72,7 @@ def test_greedy_linear():
             print("MILP:", [index for index, value in enumerate(z) if value == 1])
             print("Greedy:", switch_times)
 
-            print("Comparing reward values")
+            # print("Comparing reward values")
 
             # print(r_greedy)
             # print(r_milp)
@@ -111,14 +112,14 @@ def check_feasibility(gw, pi, r, nu):
                 if not np.isclose(r[t, s, a],np.log(pi[t, s, a]) + nu[t,s] 
                                   - gamma * np.sum([P[a][s, j] * nu[t+1, j] for j in range(n_states)])):
                     return False
-        print(f"Time {t} is feasible")
+        # print(f"Time {t} is feasible")
     
     # Add constraints for the last time step
     for s in range(n_states):
         for a in range(n_actions):
             if not np.isclose(r[T-1, s, a], np.log(pi[T-1, s, a]) + nu[T-1, s]):
                 return False
-    print(f"Time {T-1} is feasible")
+    # print(f"Time {T-1} is feasible")
     return True     
                 
 if __name__ == "__main__":
