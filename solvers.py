@@ -167,11 +167,12 @@ def solve_greedy_backward(gw, pi):
                 for a in range(n_actions):
                     model.addConstr(r[t,s, a] == r[tau-1,s,a], name=f"r_def_{t}_{s}_{a}")        
  
-        ### Reward Other Intervals Consistency constraints
+        ### Reward&Nu Other Intervals Consistency constraints
         for t in range(tau,T):
             for s in range(n_states):
                 for a in range(n_actions):
                     model.addConstr(r[t,s, a] == r_values[t,s,a], name=f"r_def_{t}_{s}_{a}")               
+                model.addConstr(nu[t,s] == nu_values[t,s,], name=f"nu_def_{t}_{s}_{a}")               
 
         model.optimize()
         if model.Status == GRB.OPTIMAL:
@@ -237,6 +238,8 @@ def solve_greedy_backward_bisection(gw, pi):
             for s in range(n_states):
                 for a in range(n_actions):
                     model.addConstr(r[t,s, a] == r_values[t,s,a], name=f"r_def_{t}_{s}_{a}")               
+            model.addConstr(nu[t,s] == nu_values[t,s,], name=f"nu_def_{t}_{s}_{a}")               
+
 
         model.optimize()
         if model.Status == GRB.OPTIMAL:

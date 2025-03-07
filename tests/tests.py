@@ -13,7 +13,7 @@ from utils.bellman import soft_bellman_operation
 NUMBER_OF_EXPERIMENTS = 1
 NUMBER_OF_FEATURES = 7
 
-def test_greedy_linear():
+def test_greedy():
     np.random.seed(1)
     '''
     This function compares the solutions found by Greedy-Linear to MILP over some randomly generated MDPs
@@ -59,7 +59,9 @@ def test_greedy_linear():
             print("MILP:", [index for index, value in enumerate(z) if value == 1])
 
             start_time = time.time()
+            # r_greedy, nu_greedy, switch_times  = solve_greedy_backward(gw,pi)
             r_greedy, nu_greedy, switch_times  = solve_greedy_backward_bisection(gw,pi)
+
             print(f"Greedy-Linear done in {time.time() - start_time:.2f} seconds")
 
 
@@ -174,4 +176,6 @@ def check_feasibility(gw, pi, r, nu):
     return True     
                 
 if __name__ == "__main__":
-    test_greedy_alpha()
+    test_greedy()
+
+    # test_greedy_alpha()
