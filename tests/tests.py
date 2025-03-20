@@ -4,7 +4,7 @@ import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
-from solvers import solve_milp, solve_greedy_backward, solve_greedy_backward_bisection, solve_greedy_backward_alpha
+from solvers import solve_milp, solve_greedy_backward, solve_greedy_backward_bisection, solve_greedy_backward_bisection_smaller, solve_greedy_backward_alpha
 from dynamics import BasicGridWorld
 from utils.bellman import soft_bellman_operation
 
@@ -14,11 +14,10 @@ NUMBER_OF_EXPERIMENTS = 1
 NUMBER_OF_FEATURES = 7
 
 def test_greedy():
-    np.random.seed(1)
     '''
     This function compares the solutions found by Greedy-Linear to MILP over some randomly generated MDPs
     '''
-    grid_size = 5
+    grid_size = 4
     wind = 0.1
     discount = 0.9
     horizon = 50
@@ -33,7 +32,7 @@ def test_greedy():
             rewards = rewards.T
 
 
-            reward_switch_times = sorted(np.random.choice(gw.horizon-3, number_of_switches) + 1) ### Ensures the switches do not occur at the last and first steps
+            reward_switch_times = sorted(np.random.choice(gw.horizon-3, number_of_switches, replace=False) + 1) ### Ensures the switches do not occur at the last and first steps
             print("True reward switch times: ", reward_switch_times)
             reward_switch_intervals = [0] + reward_switch_times + [gw.horizon]
             reward_functions = [np.random.uniform(0,1,(gw.n_states,gw.n_actions)) for _ in range(number_of_switches + 1)]
@@ -60,7 +59,7 @@ def test_greedy():
 
             start_time = time.time()
             # r_greedy, nu_greedy, switch_times  = solve_greedy_backward(gw,pi)
-            r_greedy, nu_greedy, switch_times  = solve_greedy_backward_bisection(gw,pi)
+            r_greedy, nu_greedy, switch_times  = solve_greedy_backward_bisection_smaller(gw,pi)
 
             print(f"Greedy-Linear done in {time.time() - start_time:.2f} seconds")
 
@@ -69,6 +68,12 @@ def test_greedy():
                 print("Greedy solution is feasible")
             else:
                 print("Greedy solution is infeasible")
+                print("Checking feasibility of rewards only")
+                if check_feasibility_reward(gw, pi, r_greedy):
+                    print("Greedy solution is REWARD feasible")
+                else:
+                    print("Greedy solution is not even REWARD feasible")
+
 
 
             print("Optimal switch times found:")
@@ -146,8 +151,8 @@ def check_feasibility_reward(gw, pi, r):
     for t in range(T-1):
         for s in range(n_states):
             for a in range(n_actions):
-                model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
                 # model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+                model.addConstr(nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)) == r[t, s, a]-np.log(pi[t, s, a]), name=f"r_def_{t}_{s}_{a}")
     
     # Solve the model
     model.optimize()
@@ -165,14 +170,14 @@ def check_feasibility(gw, pi, r, nu):
                 if not np.isclose(r[t, s, a],np.log(pi[t, s, a]) + nu[t,s] 
                                   - gamma * np.sum([P[a][s, j] * nu[t+1, j] for j in range(n_states)])):
                     return False
-        # print(f"Time {t} is feasible")
+        print(f"Time {t} is feasible")
     
     # Add constraints for the last time step
     for s in range(n_states):
         for a in range(n_actions):
             if not np.isclose(r[T-1, s, a], np.log(pi[T-1, s, a]) + nu[T-1, s]):
                 return False
-    # print(f"Time {T-1} is feasible")
+    print(f"Time {T-1} is feasible")
     return True     
                 
 if __name__ == "__main__":
