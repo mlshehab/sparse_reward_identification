@@ -238,7 +238,7 @@ def solve_greedy_backward_bisection(gw, pi):
             for s in range(n_states):
                 for a in range(n_actions):
                     model.addConstr(r[t,s, a] == r_values[t,s,a], name=f"r_def_{t}_{s}_{a}")               
-            model.addConstr(nu[t,s] == nu_values[t,s,], name=f"nu_def_{t}_{s}_{a}")               
+            model.addConstr(nu[t,s] == nu_values[t,s], name=f"nu_def_{t}_{s}_{a}")               
 
 
         model.optimize()
@@ -256,6 +256,95 @@ def solve_greedy_backward_bisection(gw, pi):
                 switch_times += [i]
                 tau = i
                 inf_i = -1
+
+        else:
+            print(f"Infeasibility found. New tau={tau}")
+            if inf_i == i or sup_i == i + 1:
+                switch_times += [i+1]
+                tau = i+1
+                inf_i = -1
+                sup_i = i+1
+            else:
+                inf_i = i
+        i = (sup_i + inf_i)//2
+
+    print(f"It took {n_iterations} iteration to solve")
+    return r_values, nu_values, switch_times[::-1]
+
+def solve_greedy_backward_bisection_smaller(gw, pi):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+
+    tau = T
+    switch_times = []
+
+    i = T//2
+    inf_i = -1
+    sup_i = T
+
+    r_values = np.zeros((T, n_states, n_actions))
+    nu_values = np.zeros((T+1, n_states))
+
+    n_iterations = 0
+    while i >= 0:
+        n_iterations += 1
+        print(f"Testing from {i} to {T-1}. {tau=}. {inf_i=}, {sup_i=}")
+        ## Is feasible?
+        model = gp.Model("Feasible")
+        model.setParam("NumericFocus", 1)
+        model.setParam('OutputFlag', False)
+        model.setObjective(0, GRB.MINIMIZE)
+        r = model.addVars(n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+        nu = model.addVars(tau-i + 1, n_states, vtype=GRB.CONTINUOUS, name="nu")
+
+        ### Reward constraints
+        for t in range(i,tau):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    model.addConstr(r[s, a] == np.log(pi[t, s, a]) + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+
+        # # Add constraints for the last time step
+        # for s in range(n_states):
+        #     for a in range(n_actions):
+        #         model.addConstr(r[T-1, s, a] == np.log(pi[T-1, s, a]) + nu[T-1, s]  )
+
+        ### Reward Consistency constraints
+        # for t in range(i,tau-1):
+        #     for s in range(n_states):
+        #         for a in range(n_actions):
+        #             model.addConstr(r[t-i,s, a] == r[tau-i-1,s,a], name=f"r_def_{t}_{s}_{a}")        
+ 
+        for s in range(n_states):
+            model.addConstr(nu[tau-i, s] == nu_values[tau,s], name=f"r_def_{t}_{s}_{a}")        
+
+             
+
+
+
+        # ### Reward Other Intervals Consistency constraints
+        # for t in range(tau,T):
+        #     for s in range(n_states):
+        #         for a in range(n_actions):
+        #             model.addConstr(r[t,s, a] == r_values[t,s,a], name=f"r_def_{t}_{s}_{a}")               
+        #     model.addConstr(nu[t,s] == nu_values[t,s], name=f"nu_def_{t}_{s}_{a}")               
+
+
+        model.optimize()
+        if model.Status == GRB.OPTIMAL:
+            for t in range(i, tau):
+                for s in range(n_states):
+                    for a in range(n_actions):
+                        r_values[t, s, a] = r[s, a].x
+                for j in range(n_states):
+                    nu_values[t, j] = nu[t-i, j].x
+            
+                # for j in range(n_states):
+                #     nu_values[tau, j] = nu[tau-i, j].x           
+
+            sup_i = i
+            # if inf_i+1 == i and i>0:
+            #     switch_times += [i]
+            #     tau = i
+            #     inf_i = -1
 
         else:
             print(f"Infeasibility found. New tau={tau}")
