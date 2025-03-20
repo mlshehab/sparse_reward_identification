@@ -207,8 +207,6 @@ def solve_L_1(gw, pi):
 
     model.optimize()
     return extract_solution(model, r, nu, T, n_states, n_actions)
-
-
 def solve_L_inf(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     model = gp.Model("MILP_Linf")
@@ -287,10 +285,60 @@ def solve_L2(gw, pi):
 
     return extract_solution(model, r, nu, T, n_states, n_actions)
 
-def extract_solution(model, r, nu, T, n_states, n_actions):
+
+def solve_PROBLEM_2(gw, U, sigmas, pi):
+
+    n_features = U.shape[1]
+    print(n_features)
+
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    print(f"The number of actions is {n_actions}")
+    model = gp.Model("Problem 2")
+
+    # Decision variables
+    r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+    nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
+    alpha = model.addVars(T, n_features, vtype=GRB.CONTINUOUS, name="alpha")
+    
+    # Objective: Minimize sum of infinity norms (L∞ norm)
+    # model.setObjective(gp.quicksum(( (alpha[t, i] - alpha[t - 1, i]) ** 2) / (2 * sigmas[i] ** 2) for i in range(n_features) for t in range(1, T)), GRB.MINIMIZE)
+    model.setObjective(0, GRB.MINIMIZE)
+    # model.setParam(GRB.Param.NonConvex, 2)
+    # Constraints
+
+    # model.addConstr(alpha[0, 0] == 0)
+    # model.addConstr(alpha[0, 1] == 1)
+
+    for t in range(T-1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t, s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)))
+                model.addConstr(r[t, s, a] == gp.quicksum(U[s + a * n_states, i] * alpha[t, i] for i in range(n_features)))
+                
+    # Add constraints for the last time step
+    for s in range(n_states):
+        for a in range(n_actions):
+            model.addConstr(r[T-1, s, a] == np.log(pi[T-1, s, a]) + nu[T-1, s]  )
+             
+            model.addConstr(r[T-1, s, a] == gp.quicksum(U[s + a * n_states, i] * alpha[T-1, i] for i in range(n_features)))
+
+    # model.setParam('IterationLimit', 2e6)  # Increase iteration limit
+    model.setParam('OutputFlag', 1)  # Enable detailed output
+    model.optimize()
+    model.computeIIS()
+    model.write("model.ilp")
+
+    return extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features)
+
+
+
+
+def extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features):
+    print(model.status)
     if model.status == GRB.OPTIMAL:
         r_values = np.zeros((T, n_states, n_actions))
         nu_values = np.zeros((T, n_states))
+        alpha_values = np.zeros((T, n_features))
         
         for t in range(T):
             for s in range(n_states):
@@ -298,8 +346,12 @@ def extract_solution(model, r, nu, T, n_states, n_actions):
                     r_values[t, s, a] = r[t, s, a].x
             for j in range(n_states):
                 nu_values[t, j] = nu[t, j].x
+            for i in range(n_features):
+                alpha_values[t, i] = alpha[t, i].x
+            
         
-        return r_values, nu_values
+        return r_values, nu_values, alpha_values
     else:
         print("No optimal solution found.")
-        return None, None
+        
+        return None, None, None

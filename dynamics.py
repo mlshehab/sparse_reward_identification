@@ -40,18 +40,15 @@ class BasicGridWorld(object):
               for j in range(self.n_actions)]
              for i in range(self.n_states)])
         
+
+
+        self.normalize_transition_matrices()
         
         self.P = []
         for a in range(self.n_actions):
             Pa = self.transition_probability[:,a,:]
             self.P.append(Pa)
-            
 
-
-
-        self.normalize_transition_matrices()
-        
-      
         self.reward = reward
 
   

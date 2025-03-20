@@ -124,15 +124,15 @@ if __name__ == "__main__":
         norm_diff = np.linalg.norm(pi[t] - policy_r[t])
         print(f"Time {t}: Norm difference between pi and policy_r: {norm_diff:.6f}")
 
-#     path_to_expert_trajectories = os.path.join(
-#     os.path.expanduser('~'),
-#     'Desktop',
-#     'dynamic_irl',
-#     'data',
-#     'simulated_gridworld_data',
-#     'exclude_explore_share_weights_1',
-#     'expert_trajectories.pickle'
-# )   
+    path_to_expert_trajectories = os.path.join(
+    os.path.expanduser('~'),
+    'Desktop',
+    'dynamic_irl',
+    'data',
+    'simulated_gridworld_data',
+    'exclude_explore_share_weights_1',
+    'expert_trajectories.pickle'
+)   
 #     rec_dir_name = os.path.join(
 #         os.path.expanduser('~'),
 #         'Desktop',
@@ -237,6 +237,6 @@ if __name__ == "__main__":
 #     # # for t in range(gw.horizon):
 #     # #     print(f"Time {t}: L1: {norm_diffs_L1[t]:.6f}, L2: {norm_diffs_L2[t]:.6f}, Linf: {norm_diffs_Linf[t]:.6f}")
 
-#     # # Plot the results
-#     # plot_results(gw, reward, results)
+    # Plot the results
+    plot_results(gw, reward, results)
 
