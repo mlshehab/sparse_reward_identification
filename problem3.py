@@ -37,7 +37,7 @@ from dynamic_irl.src.simulate_data_gridworld import create_goal_maps
 # from dynamic_irl.src.dirl_for_gridworld import fit_dirl_gridworld
 
 from main import run_methods, plot_results
-from solvers import solve_PROBLEM_2, solve_PROBLEM_3
+from solvers import solve_PROBLEM_2, solve_PROBLEM_3, solve_PROBLEM_3_greedy
 
 def generate_weight_trajectories(sigmas, weights0, T):
     '''Simulates time varying weights, for a given sigmas array
@@ -110,14 +110,14 @@ def plot_time_varying_weights(true_weights, recovered_weights, T):
     # Create directories if they don't exist
     if not os.path.exists("results"):
         os.makedirs("results")
-    if not os.path.exists("results/problem2"):
-        os.makedirs("results/problem2")
+    if not os.path.exists("results/problem3"):
+        os.makedirs("results/problem3")
 
     # Generate a timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Save the figure with a timestamp
-    plt.savefig(f"results/problem2/feas_time_varying_weights_{timestamp}.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"results/problem3/time_varying_weights_{timestamp}.png", dpi=300, bbox_inches='tight')
 
 
 if __name__ == "__main__":
@@ -184,7 +184,16 @@ if __name__ == "__main__":
                     true_reward[t, s, a] = U[s + a * gw.n_states,0] * time_varying_weights[t,0] \
                         + U[s + a * gw.n_states, 1] * time_varying_weights[t,1]
     
+    true_reward_matrix = np.zeros((gw.horizon, gw.n_states * gw.n_actions))
 
+    for t in range(gw.horizon):
+        for s in range(gw.n_states):
+            for a in range(gw.n_actions):
+                idx = s + a * gw.n_states
+                true_reward_matrix[t, idx] = (
+                    U[idx, 0] * time_varying_weights[t, 0] +
+                    U[idx, 1] * time_varying_weights[t, 1]
+                )
     # for t in range(gw.horizon):
     #     print(f"At time step {t}:")
     #     print(f"true reward: {true_reward[t, :, :]}")
@@ -192,7 +201,12 @@ if __name__ == "__main__":
     # print(true_reward)
     V, Q, pi = soft_bellman_operation(gw, true_reward)
     
-    alpha_values, sol  = solve_PROBLEM_2(gw, U, sigmas, pi)
-
-  
-    plot_time_varying_weights(time_varying_weights, alpha_values, T)
+    r_recovered, nu_recovered  = solve_PROBLEM_3_greedy(gw, U, sigmas, pi)
+    rank_r_recovered = np.linalg.matrix_rank(r_recovered)
+    print(f"The rank of the recovered reward matrix is: {rank_r_recovered}")
+    
+    rank_true_reward = np.linalg.matrix_rank(true_reward_matrix)
+    print(f"The rank of the true reward matrix is: {rank_true_reward}")
+    idxs = [0,14]
+    r = r_recovered[:,idxs]
+    plot_time_varying_weights(time_varying_weights, r, T)
