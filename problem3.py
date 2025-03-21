@@ -28,16 +28,16 @@ if repo2_path not in sys.path:
     sys.path.append(repo2_path)
 
 
-import dynamic_irl
+# import dynamic_irl
 
-from dynamic_irl.src.envs  import  gridworld
+# from dynamic_irl.src.envs  import  gridworld
 
-from dynamic_irl.src.simulate_data_gridworld import generate_expert_trajectories
-from dynamic_irl.src.simulate_data_gridworld import create_goal_maps
+# from dynamic_irl.src.simulate_data_gridworld import generate_expert_trajectories
+# from dynamic_irl.src.simulate_data_gridworld import create_goal_maps
 # from dynamic_irl.src.dirl_for_gridworld import fit_dirl_gridworld
 
 from main import run_methods, plot_results
-from solvers import solve_PROBLEM_2, solve_PROBLEM_3, solve_PROBLEM_3_greedy
+from solvers import solve_PROBLEM_2, solve_PROBLEM_3, solve_PROBLEM_3_RNNM
 
 def generate_weight_trajectories(sigmas, weights0, T):
     '''Simulates time varying weights, for a given sigmas array
@@ -201,12 +201,12 @@ if __name__ == "__main__":
     # print(true_reward)
     V, Q, pi = soft_bellman_operation(gw, true_reward)
     
-    r_recovered, nu_recovered  = solve_PROBLEM_3_greedy(gw, U, sigmas, pi)
+    r_recovered, nu_recovered  = solve_PROBLEM_3_RNNM(gw, U, sigmas, pi)
     rank_r_recovered = np.linalg.matrix_rank(r_recovered)
     print(f"The rank of the recovered reward matrix is: {rank_r_recovered}")
     
     rank_true_reward = np.linalg.matrix_rank(true_reward_matrix)
     print(f"The rank of the true reward matrix is: {rank_true_reward}")
-    idxs = [0,14]
-    r = r_recovered[:,idxs]
-    plot_time_varying_weights(time_varying_weights, r, T)
+    # idxs = [0,14]
+    # r = r_recovered[:,idxs]
+    # plot_time_varying_weights(time_varying_weights, r, T)
