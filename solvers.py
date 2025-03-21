@@ -340,6 +340,7 @@ def solve_greedy_backward_bisection_smaller(gw, pi):
     return r_values, nu_values, switch_times[::-1]
 
 def solve_greedy_linear_cvxpy(gw, pi): ### Does not work
+
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
 
     tau = 0
@@ -418,6 +419,7 @@ def solve_L_1(gw, pi):
 
     model.optimize()
     return extract_solution(model, r, nu, T, n_states, n_actions)
+
 def solve_L_inf(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     model = gp.Model("MILP_Linf")
@@ -496,14 +498,12 @@ def solve_L2(gw, pi):
 
     return extract_solution(model, r, nu, T, n_states, n_actions)
 
-
 def solve_PROBLEM_2(gw, U, sigmas, pi):
 
     n_features = U.shape[1]
-    print(n_features)
-
+    
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
-    print(f"The number of actions is {n_actions}")
+   
     model = gp.Model("Problem 2")
 
     # Decision variables
@@ -512,11 +512,10 @@ def solve_PROBLEM_2(gw, U, sigmas, pi):
     alpha = model.addVars(T, n_features, lb=float("-inf"),  vtype=GRB.CONTINUOUS, name="alpha")
     
     # Objective: Minimize sum of infinity norms (L∞ norm)
-    # model.setObjective(gp.quicksum(( (alpha[t, i] - alpha[t - 1, i]) ** 2) / (2 * sigmas[i] ** 2) for i in range(n_features) for t in range(1, T)), GRB.MINIMIZE)
-    model.setObjective(0, GRB.MINIMIZE)
-    # model.setParam(GRB.Param.NonConvex, 2)
+    model.setObjective(gp.quicksum(( (alpha[t, i] - alpha[t - 1, i]) ** 2) / (2 * sigmas[i] ** 2) for i in range(n_features) for t in range(1, T)), GRB.MINIMIZE)
+    # model.setObjective(0, GRB.MINIMIZE)
+    
     # Constraints
-
     # model.addConstr(alpha[0, 0] == 0)
     # model.addConstr(alpha[0, 1] == 1)
 
@@ -533,19 +532,114 @@ def solve_PROBLEM_2(gw, U, sigmas, pi):
              
             model.addConstr(r[T-1, s, a] == gp.quicksum(U[s + a * n_states, i] * alpha[T-1, i] for i in range(n_features)))
 
-    # model.setParam('IterationLimit', 2e6)  # Increase iteration limit
+    
     model.setParam('OutputFlag', 1)  # Enable detailed output
+    model.setParam("IterationLimit", 1e8)
+    model.setParam("BarIterLimit", 1000 )  # Increase to a larger number
     model.optimize()
     # model.computeIIS()
     # model.write("model.ilp")
+    print("Status: ", model.status)
+   
+    # print("Iterations:", model.IterCount)  # Number of iterations
 
-    return extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features)
+    alpha_values = np.zeros((T, n_features))
+    for t in range(T):
+        for i in range(n_features):
+            alpha_values[t, i] = alpha[t, i].x
+    # print(alpha_values)
+
+    return alpha_values, extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features)
 
 
 
+def solve_PROBLEM_3(gw, U, sigmas, pi):
+    import cvxpy as cp
+    import numpy as np
+
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    n_features = U.shape[1]
+
+    # Decision variables
+    r = cp.Variable((T, n_states * n_actions))  # Flattened reward matrix
+    nu = cp.Variable((T, n_states))
+    # alpha = cp.Variable((T, n_features))
+    
+    # Constraints
+    constraints = []
+    for t in range(T-1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                idx = s + a * n_states
+                constraints.append(r[t, idx] == cp.log(pi[t, s, a]) + nu[t, s] - gamma * cp.sum(P[a][s, :] @ nu[t+1, :]))
+                # constraints.append(r[t, idx] == U[idx, :] @ alpha[t, :])
+    
+    for s in range(n_states):
+        for a in range(n_actions):
+            idx = s + a * n_states
+            constraints.append(r[T-1, idx] == cp.log(pi[T-1, s, a]) + nu[T-1, s])
+            # constraints.append(r[T-1, idx] == U[idx, :] @ alpha[T-1, :])
+    
+    # Objective: Minimize the nuclear norm of the reward matrix
+    objective = cp.Minimize(cp.norm(r,"nuc"))
+    
+    # Solve the problem
+    problem = cp.Problem(objective, constraints)
+    problem.solve(solver=cp.SCS, verbose=True)
+    
+    print("Status:", problem.status)
+    
+    return r.value, nu.value
+
+def solve_PROBLEM_3_RNNM(gw, U, sigmas, pi, max_iter=10, delta=1e-3):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    n_features = U.shape[1]
+    
+    # Decision variables
+    r = cp.Variable((T, n_states * n_actions))  # Flattened reward matrix
+    nu = cp.Variable((T, n_states))
+    
+    # Constraints
+    constraints = []
+    for t in range(T - 1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                idx = s + a * n_states
+                constraints.append(r[t, idx] == cp.log(pi[t, s, a]) + nu[t, s] - gamma * cp.sum(P[a][s, :] @ nu[t + 1, :]))
+    
+    for s in range(n_states):
+        for a in range(n_actions):
+            idx = s + a * n_states
+            constraints.append(r[T - 1, idx] == cp.log(pi[T - 1, s, a]) + nu[T - 1, s])
+    
+    # Initialize weights
+    W1 = np.eye(T)
+    W2 = np.eye(n_states * n_actions)
+    
+    for _ in range(max_iter):
+        # Weighted nuclear norm minimization
+        objective = cp.Minimize(cp.norm(W1 @ r @ W2, "nuc"))
+        
+        # Solve the problem
+        problem = cp.Problem(objective, constraints)
+        problem.solve(solver=cp.SCS, verbose=True)
+        
+        # Update weights based on singular values
+        if problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
+            U, Sigma, Vt = np.linalg.svd(W1 @ r.value @ W2, full_matrices=False)
+            Y = np.linalg.inv(W1) @ U @ np.diag(Sigma) @ U.T @ np.linalg.inv(W1)
+            Z = np.linalg.inv(W2) @ Vt.T @ np.diag(Sigma) @ Vt @ np.linalg.inv(W2)
+            W1 = np.linalg.inv(Y + delta * np.eye(T)) ** 0.5
+            W2 = np.linalg.inv(Z + delta * np.eye(n_states * n_actions)) ** 0.5
+        else:
+            print("Optimization failed.")
+            break
+    
+    print("Final Status:", problem.status)
+    return r.value, nu.value
 
 def extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features):
-    print(model.status)
+ 
     if model.status == GRB.OPTIMAL:
         r_values = np.zeros((T, n_states, n_actions))
         nu_values = np.zeros((T, n_states))
