@@ -302,30 +302,9 @@ def solve_greedy_backward_bisection_smaller(gw, pi):
                 for a in range(n_actions):
                     model.addConstr(r[s, a] == np.log(pi[t, s, a]) + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
 
-        # # Add constraints for the last time step
-        # for s in range(n_states):
-        #     for a in range(n_actions):
-        #         model.addConstr(r[T-1, s, a] == np.log(pi[T-1, s, a]) + nu[T-1, s]  )
-
-        ### Reward Consistency constraints
-        # for t in range(i,tau-1):
-        #     for s in range(n_states):
-        #         for a in range(n_actions):
-        #             model.addConstr(r[t-i,s, a] == r[tau-i-1,s,a], name=f"r_def_{t}_{s}_{a}")        
  
         for s in range(n_states):
             model.addConstr(nu[tau-i, s] == nu_values[tau,s], name=f"r_def_{t}_{s}_{a}")        
-
-             
-
-
-
-        # ### Reward Other Intervals Consistency constraints
-        # for t in range(tau,T):
-        #     for s in range(n_states):
-        #         for a in range(n_actions):
-        #             model.addConstr(r[t,s, a] == r_values[t,s,a], name=f"r_def_{t}_{s}_{a}")               
-        #     model.addConstr(nu[t,s] == nu_values[t,s], name=f"nu_def_{t}_{s}_{a}")               
 
 
         model.optimize()
@@ -528,9 +507,9 @@ def solve_PROBLEM_2(gw, U, sigmas, pi):
     model = gp.Model("Problem 2")
 
     # Decision variables
-    r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
-    nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
-    alpha = model.addVars(T, n_features, vtype=GRB.CONTINUOUS, name="alpha")
+    r = model.addVars(T, n_states, n_actions, lb=float("-inf"), vtype=GRB.CONTINUOUS, name="r")
+    nu = model.addVars(T, n_states, lb=float("-inf"), vtype=GRB.CONTINUOUS, name="nu")
+    alpha = model.addVars(T, n_features, lb=float("-inf"),  vtype=GRB.CONTINUOUS, name="alpha")
     
     # Objective: Minimize sum of infinity norms (L∞ norm)
     # model.setObjective(gp.quicksum(( (alpha[t, i] - alpha[t - 1, i]) ** 2) / (2 * sigmas[i] ** 2) for i in range(n_features) for t in range(1, T)), GRB.MINIMIZE)
@@ -557,8 +536,8 @@ def solve_PROBLEM_2(gw, U, sigmas, pi):
     # model.setParam('IterationLimit', 2e6)  # Increase iteration limit
     model.setParam('OutputFlag', 1)  # Enable detailed output
     model.optimize()
-    model.computeIIS()
-    model.write("model.ilp")
+    # model.computeIIS()
+    # model.write("model.ilp")
 
     return extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features)
 
