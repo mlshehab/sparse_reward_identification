@@ -1,7 +1,10 @@
-import gurobipy as gp
+# import gurobipy as gp
 import cvxpy as cp
-from gurobipy import GRB
+# from gurobipy import GRB
 import numpy as np
+from scipy.linalg import sqrtm
+from scipy.linalg import fractional_matrix_power
+import scipy.linalg
 
 def solve_milp(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
@@ -612,52 +615,70 @@ def solve_PROBLEM_3(gw, U, sigmas, pi):
     
     return r.value, nu.value
 
-def solve_PROBLEM_3_RNNM(gw, U, sigmas, pi, max_iter=10, delta=1e-3):
+
+def solve_PROBLEM_3_RNNM(gw, U, sigmas, pi, max_iter=10, delta= 1e-4):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     n_features = U.shape[1]
-    
-    # Decision variables
-    r = cp.Variable((T, n_states * n_actions))  # Flattened reward matrix
-    nu = cp.Variable((T, n_states))
-    
-    # Constraints
-    constraints = []
-    for t in range(T - 1):
-        for s in range(n_states):
-            for a in range(n_actions):
-                idx = s + a * n_states
-                constraints.append(r[t, idx] == cp.log(pi[t, s, a]) + nu[t, s] - gamma * cp.sum(P[a][s, :] @ nu[t + 1, :]))
-    
-    for s in range(n_states):
-        for a in range(n_actions):
-            idx = s + a * n_states
-            constraints.append(r[T - 1, idx] == cp.log(pi[T - 1, s, a]) + nu[T - 1, s])
     
     # Initialize weights
     W1 = np.eye(T)
     W2 = np.eye(n_states * n_actions)
     
+    # Initialize variables to warm start the solver
+    r_prev = np.zeros((T, n_states * n_actions))
+    nu_prev = np.zeros((T, n_states))
+    
     for _ in range(max_iter):
+        # Reset decision variables in each iteration
+        r = cp.Variable((T, n_states * n_actions), value=r_prev)
+        nu = cp.Variable((T, n_states), value=nu_prev)
+        
+        # Constraints
+        constraints = []
+        for t in range(T - 1):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    idx = s + a * n_states
+                    constraints.append(r[t, idx] == cp.log(pi[t, s, a]) + nu[t, s] - gamma * cp.sum(P[a][s, :] @ nu[t + 1, :]))
+        
+        for s in range(n_states):
+            for a in range(n_actions):
+                idx = s + a * n_states
+                constraints.append(r[T - 1, idx] == cp.log(pi[T - 1, s, a]) + nu[T - 1, s])
+        
         # Weighted nuclear norm minimization
         objective = cp.Minimize(cp.norm(W1 @ r @ W2, "nuc"))
         
         # Solve the problem
         problem = cp.Problem(objective, constraints)
-        problem.solve(solver=cp.SCS, verbose=True)
+        problem.solve(solver=cp.SCS, verbose=True)  # Reduced verbosity
         
         # Update weights based on singular values
         if problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
             U, Sigma, Vt = np.linalg.svd(W1 @ r.value @ W2, full_matrices=False)
-            Y = np.linalg.inv(W1) @ U @ np.diag(Sigma) @ U.T @ np.linalg.inv(W1)
-            Z = np.linalg.inv(W2) @ Vt.T @ np.diag(Sigma) @ Vt @ np.linalg.inv(W2)
-            W1 = np.linalg.inv(Y + delta * np.eye(T)) ** 0.5
-            W2 = np.linalg.inv(Z + delta * np.eye(n_states * n_actions)) ** 0.5
+    
+            Sigma = np.diag(Sigma)
+        
+            Y = np.linalg.pinv(W1) @ U @ Sigma @ U.T @ np.linalg.pinv(W1)
+            Z = np.linalg.pinv(W2) @ Vt.T @ Sigma@ Vt @ np.linalg.pinv(W2)
+           
+            W1 = scipy.linalg.sqrtm(np.linalg.pinv(Y + delta * np.eye(T)))
+            W2 = scipy.linalg.sqrtm(np.linalg.pinv(Z + delta * np.eye(n_states * n_actions)))
+            # Warm start for next iteration
+            r_prev = r.value
+            nu_prev = nu.value
         else:
             print("Optimization failed.")
             break
     
     print("Final Status:", problem.status)
     return r.value, nu.value
+
+
+
+
+
+
 
 def extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features):
  

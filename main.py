@@ -15,9 +15,9 @@ sys.path.append(repo2_path)
 
 # print(sys.path)
 # sys.path.append('/home/mlshehab/Desktop/dynamic_irl')
-import dynamic_irl
+# import dynamic_irl
 
-from dynamic_irl.src.envs  import  gridworld
+# from dynamic_irl.src.envs  import  gridworld
 
 
 
