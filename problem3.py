@@ -5,11 +5,12 @@ from utils.bellman import state_only_soft_bellman_operation, soft_bellman_operat
 import numpy as np
 from utils.checks import is_markovian
 import pickle
-import os
 import sys
 import time
 import datetime
 import matplotlib.pyplot as plt
+import os
+from datetime import datetime
 
 path_to_dynamic_irl = '~\Desktop'
 repo2_path = os.path.expanduser(path_to_dynamic_irl)  # Adjust path if necessary
@@ -37,8 +38,8 @@ if repo2_path not in sys.path:
 # from dynamic_irl.src.dirl_for_gridworld import fit_dirl_gridworld
 
 from main import run_methods, plot_results
-from solvers import solve_PROBLEM_2, solve_PROBLEM_3, solve_PROBLEM_3_RNNM
-
+from solvers import solve_PROBLEM_2, solve_PROBLEM_3, solve_PROBLEM_3_RNNM, solve_PROBLEM_3_RTH
+from scipy.optimize import minimize
 def generate_weight_trajectories(sigmas, weights0, T):
     '''Simulates time varying weights, for a given sigmas array
 
@@ -62,6 +63,23 @@ def generate_weight_trajectories(sigmas, weights0, T):
     weights = np.cumsum(noise, axis=0)
     return weights #array of size (TxK)
 
+def optimal_ratio(true, recovered):
+    """
+    Finds the optimal ratio that minimizes the squared distance between true and recovered weights.
+    
+    Parameters:
+    - true: numpy array of true weights for a specific state
+    - recovered: numpy array of recovered weights for the same state
+    
+    Returns:
+    - ratio: optimal ratio to scale the recovered weights
+    """
+    def loss(ratio):
+        return np.sum((true - recovered * ratio) ** 2)
+
+    # Minimize the squared difference using scipy's minimize function
+    result = minimize(loss, 1.0)  # Initial guess is 1.0
+    return result.x[0]  # Optimal ratio
 
 def plot_time_varying_weights(true_weights, recovered_weights, T):
     """
@@ -72,40 +90,51 @@ def plot_time_varying_weights(true_weights, recovered_weights, T):
     - recovered_weights: numpy array of shape (T, num_maps), the recovered time-varying weights
     - T: int, number of time steps
     """
-    # Enable LaTeX rendering
-    plt.rcParams.update({
-        "text.usetex": True,  # Use LaTeX for text rendering
-        "font.family": "serif",  # Use a serif font
-        "font.serif": ["Computer Modern"],  # Default LaTeX font
-    })
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(18, 12))
 
-    # Plot weight 0 (reward at home state)
-    plt.figure(figsize=(14, 7), dpi=150)  # Increase figure size and DPI for better quality
-    plt.subplot(1, 2, 1)
-    plt.plot(range(T), true_weights[:, 0], label='True Reward at Home State', linestyle='--', linewidth=2)
-    plt.plot(range(T), recovered_weights[:, 0], label='Recovered Reward at Home State', linewidth=2)
-    plt.xlabel('Time', fontsize=12)
-    plt.ylabel('Weight', fontsize=12)
-    plt.title('Time-Varying Weight for Home State', fontsize=14)
-    plt.legend(fontsize=10)
-    plt.grid(True, linestyle='--', alpha=0.7)  # Add grid for better readability
+    # Option 1: Standardize
+    standardized_true_home = (true_weights[:-1, 0] - np.mean(true_weights[:-1, 0])) / np.std(true_weights[:-1, 0])
+    standardized_recovered_home = (recovered_weights[:-1, 0] - np.mean(recovered_weights[:-1, 0])) / np.std(recovered_weights[:-1, 0])
+    standardized_true_water = (true_weights[:-1, 1] - np.mean(true_weights[:-1, 1])) / np.std(true_weights[:-1, 1])
+    standardized_recovered_water = (recovered_weights[:-1, 1] - np.mean(recovered_weights[:-1, 1])) / np.std(recovered_weights[:-1, 1])
 
-    # Plot weight 1 (reward at water state)
-    plt.subplot(1, 2, 2)
-    plt.plot(range(T), true_weights[:, 1], label='True Reward at Water State', linestyle='--', linewidth=2)
-    plt.plot(range(T), recovered_weights[:, 1], label='Recovered Reward at Water State', linewidth=2)
-    plt.xlabel('Time', fontsize=12)
-    plt.ylabel('Weight', fontsize=12)
-    plt.title('Time-Varying Weight for Water State', fontsize=14)
-    plt.legend(fontsize=10)
-    plt.grid(True, linestyle='--', alpha=0.7)  # Add grid for better readability
+    # Option 2: Min-Max Scaling
+    min_max_true_home = (true_weights[:-1, 0] - np.min(true_weights[:-1, 0])) / (np.max(true_weights[:-1, 0]) - np.min(true_weights[:-1, 0]))
+    min_max_recovered_home = (recovered_weights[:-1, 0] - np.min(recovered_weights[:-1, 0])) / (np.max(recovered_weights[:-1, 0]) - np.min(recovered_weights[:-1, 0]))
+    min_max_true_water = (true_weights[:-1, 1] - np.min(true_weights[:-1, 1])) / (np.max(true_weights[:-1, 1]) - np.min(true_weights[:-1, 1]))
+    min_max_recovered_water = (recovered_weights[:-1, 1] - np.min(recovered_weights[:-1, 1])) / (np.max(recovered_weights[:-1, 1]) - np.min(recovered_weights[:-1, 1]))
+
+    # Option 3: Optimal Ratio
+    ratio_home = optimal_ratio(true_weights[:-1, 0], recovered_weights[:-1, 0])
+    adjusted_recovered_home = recovered_weights[:-1, 0] * ratio_home
+    ratio_water = optimal_ratio(true_weights[:-1, 1], recovered_weights[:-1, 1])
+    adjusted_recovered_water = recovered_weights[:-1, 1] * ratio_water
+
+    # Plotting
+    for i, (true_home, recovered_home, true_water, recovered_water, method) in enumerate([
+        (standardized_true_home, standardized_recovered_home, standardized_true_water, standardized_recovered_water, "Standardized"),
+        (min_max_true_home, min_max_recovered_home, min_max_true_water, min_max_recovered_water, "Min-Max Scaled"),
+        (true_weights[:-1, 0], adjusted_recovered_home, true_weights[:-1, 1], adjusted_recovered_water, "Optimal Ratio")
+    ]):
+        plt.subplot(3, 2, 2*i + 1)
+        plt.plot(range(T-1), true_home, label=f'True Reward at Home State ({method})', linestyle='--', linewidth=2)
+        plt.plot(range(T-1), recovered_home, label=f'Recovered Reward at Home State ({method})', linewidth=2)
+        plt.xlabel('Time', fontsize=12)
+        plt.ylabel('Weight', fontsize=12)
+        plt.title(f'Time-Varying Weight for Home State ({method})', fontsize=14)
+        plt.legend(fontsize=10)
+        plt.grid(True, linestyle='--', alpha=0.7)
+
+        plt.subplot(3, 2, 2*i + 2)
+        plt.plot(range(T-1), true_water, label=f'True Reward at Water State ({method})', linestyle='--', linewidth=2)
+        plt.plot(range(T-1), recovered_water, label=f'Recovered Reward at Water State ({method})', linewidth=2)
+        plt.xlabel('Time', fontsize=12)
+        plt.ylabel('Weight', fontsize=12)
+        plt.title(f'Time-Varying Weight for Water State ({method})', fontsize=14)
+        plt.legend(fontsize=10)
+        plt.grid(True, linestyle='--', alpha=0.7)
 
     plt.tight_layout()
-    # plt.show()
-    # Save the figure
-    import os
-    from datetime import datetime
 
     # Create directories if they don't exist
     if not os.path.exists("results"):
@@ -118,7 +147,6 @@ def plot_time_varying_weights(true_weights, recovered_weights, T):
 
     # Save the figure with a timestamp
     plt.savefig(f"results/problem3/time_varying_weights_{timestamp}.png", dpi=300, bbox_inches='tight')
-
 
 if __name__ == "__main__":
     
@@ -201,12 +229,128 @@ if __name__ == "__main__":
     # print(true_reward)
     V, Q, pi = soft_bellman_operation(gw, true_reward)
     
-    r_recovered, nu_recovered  = solve_PROBLEM_3_RNNM(gw, U, sigmas, pi)
-    rank_r_recovered = np.linalg.matrix_rank(r_recovered)
-    print(f"The rank of the recovered reward matrix is: {rank_r_recovered}")
+    # r_recovered, nu_recovered  = solve_PROBLEM_3_RTH(gw, U, sigmas, pi)
+    r_recovered, nu_recovered  = solve_PROBLEM_3(gw, U, sigmas, pi)
+
+    r_recovered_reshaped =  np.zeros((gw.horizon, gw.n_states , gw.n_actions))
+    for t in range(gw.horizon):
+        for s in range(gw.n_states):
+            for a in range(gw.n_actions):
+                idx = s + a * gw.n_states
+                r_recovered_reshaped[t, s, a] = r_recovered[t,idx]
     
-    rank_true_reward = np.linalg.matrix_rank(true_reward_matrix)
-    print(f"The rank of the true reward matrix is: {rank_true_reward}")
+    # Find the policy for r_recovered
+    V_recovered, Q_recovered, pi_recovered = soft_bellman_operation(gw, r_recovered_reshaped)
+
+    # Calculate the norm difference between the true policy and the recovered policy
+    for t in range(gw.horizon):
+        norm_difference = np.linalg.norm(pi[t] - pi_recovered[t])
+        assert norm_difference < 1e-6, f"Norm difference between the true policy and the recovered policy at time step {t}: {norm_difference}"
+        # print(f"Norm difference between the true policy and the recovered policy at time step {t}: {norm_difference}")
+
+    singular_values = np.linalg.svd(r_recovered, compute_uv=False)
+    rounded_singular_values = np.round(singular_values, 4)
+    # print(f"Singular values of r_recovered (rounded to 4 decimal points): {rounded_singular_values}")
+    
+
+    def row_space_basis(matrix, top_k=2, tol=1e-10):
+        """
+        Compute a basis for the row space of `matrix`, keeping only the `top_k` largest singular values.
+
+        Args:
+            matrix (numpy.ndarray): The input matrix.
+            top_k (int): Number of singular vectors to retain.
+            tol (float): Tolerance for rank determination.
+
+        Returns:
+            numpy.ndarray: Basis for the row space.
+        """
+        U, S, Vt = np.linalg.svd(matrix, full_matrices=False)
+        rank = min(top_k, np.sum(S > tol))  # Keep at most `top_k` nonzero singular values
+        return Vt[:rank, :]  # The first `rank` rows of Vt form the row space basis
+
+    def get_coordinates_wrt_row_basis(matrix, basis):
+        """
+        Compute the coordinate representation of each row of `matrix` with respect to `basis`.
+
+        Args:
+            matrix (numpy.ndarray): The original matrix.
+            basis (numpy.ndarray): The row space basis.
+
+        Returns:
+            numpy.ndarray: The coordinate representation of each row.
+        """
+        return np.linalg.lstsq(basis.T, matrix.T, rcond=None)[0].T  # Solve for row coordinates
+
+    # Example usage
+ 
+    basis = row_space_basis(r_recovered)
+
+    print("basis: ", basis.shape)
+
+    def change_of_basis_matrix_v1(B, B_prime):
+        """
+        Compute the change of basis matrix P such that B P ≈ B'.
+
+        Parameters:
+            B (np.ndarray): Original basis matrix (n x m).
+            B_prime (np.ndarray): Target basis matrix (n x m).
+
+        Returns:
+            P (np.ndarray): Change of basis matrix (m x m).
+        """
+        # Compute P using the least-squares solution: P = (B^T B)^{-1} B^T B'
+        P = np.linalg.pinv(B)@ B_prime
+        return P
+
+
+
+    def change_of_basis_matrix_v2(B, B_prime):
+        """
+        Computes the change of basis matrix P such that B' ≈ P B.
+        Uses the Moore-Penrose pseudoinverse if B is not square.
+        """
+        B = np.array(B, dtype=np.float64)
+        B_prime = np.array(B_prime, dtype=np.float64)
+        
+        if B.shape != B_prime.shape:
+            print("Error: B and B' must have the same dimensions.")
+            return None
+
+        # Compute the pseudoinverse of B
+        B_pseudo_inv = np.linalg.pinv(B)
+        
+        # Compute P
+        P = np.dot(B_prime, B_pseudo_inv)
+        
+        # Compute error
+        error = np.linalg.norm(np.dot(P, B) - B_prime)
+        print(f"Transformation error: {error:.6f}")
+        
+        if np.allclose(np.dot(P, B), B_prime):
+            print("Exact change of basis matrix found.")
+        else:
+            print("Only an approximate transformation exists.")
+
+        return P
+
+
+    P = change_of_basis_matrix_v1(basis, U.T)
+
+    # print("P@basis: ", np.round(np.dot(P, basis), 3))
+    # print("The shape of the basis is: ", basis.shape)
+    # rounded_basis = np.round(basis, 3)
+    coordinates = get_coordinates_wrt_row_basis(r_recovered, np.dot( basis, P))
+    print("coordinates: ", coordinates.shape)
+    # # print(f"Coordinates of r_recovered with respect to the basis: {coordinates.shape}")
+    # n_states = gw.n_states  # Assuming `gw` is the gridworld object with the attribute `n_states`
+    # for i, vector in enumerate(rounded_basis):
+    #     print(f"Basis vector {i + 1} (rounded to 3 decimal points):")
+    #     for j in range(0, len(vector), n_states):
+    #         print(vector[j:j + n_states] - min(vector))
+    #     print()  # Add an empty line for better readability between basis vectors
+
+   
     # idxs = [0,14]
     # r = r_recovered[:,idxs]
-    # plot_time_varying_weights(time_varying_weights, r, T)
+    plot_time_varying_weights(time_varying_weights, coordinates, T)

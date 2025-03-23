@@ -574,7 +574,7 @@ def solve_PROBLEM_3(gw, U, sigmas, pi):
         for s in range(n_states):
             for a in range(n_actions):
                 idx = s + a * n_states
-                constraints.append(r[t, idx] == cp.log(pi[t, s, a]) + nu[t, s] - gamma * cp.sum(P[a][s, :] @ nu[t+1, :]))
+                constraints.append(r[t, idx] == cp.log(pi[t, s, a]) + nu[t, s] - gamma * (P[a][s, :] @ nu[t+1, :]))
                 # constraints.append(r[t, idx] == U[idx, :] @ alpha[t, :])
     
     for s in range(n_states):
@@ -588,7 +588,7 @@ def solve_PROBLEM_3(gw, U, sigmas, pi):
     
     # Solve the problem
     problem = cp.Problem(objective, constraints)
-    problem.solve(solver=cp.SCS, verbose=True)
+    problem.solve(solver=cp.SCS, verbose=False)
     
     print("Status:", problem.status)
     
@@ -630,7 +630,7 @@ def solve_PROBLEM_3_RNNM(gw, U, sigmas, pi, max_iter=10, delta= 1e-4):
         
         # Solve the problem
         problem = cp.Problem(objective, constraints)
-        problem.solve(solver=cp.SCS, verbose=True)  # Reduced verbosity
+        problem.solve(solver=cp.MOSEK, verbose=True)  # Reduced verbosity
         
         # Update weights based on singular values
         if problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
@@ -655,7 +655,72 @@ def solve_PROBLEM_3_RNNM(gw, U, sigmas, pi, max_iter=10, delta= 1e-4):
 
 
 
+def solve_PROBLEM_3_RTH(gw, U, sigmas, pi, max_iter=10, delta=1e-4):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    n_features = U.shape[1]
+    
+    # Initialize variables to warm start the solver
+    r_prev = np.zeros((T, n_states * n_actions))
+    nu_prev = np.zeros((T, n_states))
 
+    Y_k = np.eye(T)
+    Z_k = np.eye(n_states * n_actions)
+    
+    for _ in range(max_iter):
+        # Decision variables
+        r = cp.Variable((T, n_states * n_actions), value=r_prev)
+        nu = cp.Variable((T, n_states), value=nu_prev)
+        Y = cp.Variable((T, T), PSD=True)
+        Z = cp.Variable((n_states * n_actions, n_states * n_actions), PSD=True)
+        
+        # Constraints
+        constraints = [
+            cp.bmat([[Y, r], [r.T, Z]]) >> 0,  # Positive semi-definite constraint
+        ]
+        
+        for t in range(T - 1):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    idx = s + a * n_states
+                    constraints.append(r[t, idx] == cp.log(pi[t, s, a]) + nu[t, s] - gamma * cp.sum(P[a][s, :] @ nu[t + 1, :]))
+        
+        for s in range(n_states):
+            for a in range(n_actions):
+                idx = s + a * n_states
+                constraints.append(r[T - 1, idx] == cp.log(pi[T - 1, s, a]) + nu[T - 1, s])
+        
+        # Reweighted Trace Heuristic Objective
+        # Compute inverses using scipy.linalg.inv
+        Y_k_inv = scipy.linalg.pinv(Y_k + delta * np.eye(T))
+        Z_k_inv = scipy.linalg.pinv(Z_k + delta * np.eye(n_states * n_actions))
+        
+        # Reweighted Trace Heuristic Objective
+        objective = cp.Minimize(cp.trace(Y_k_inv @ Y) + cp.trace(Z_k_inv @ Z))
+
+        # Solve the problem
+        problem = cp.Problem(objective, constraints)
+        problem.solve(solver=cp.MOSEK, verbose=True)
+        
+        # Update weights based on solution
+        if problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
+            r_prev = r.value
+            iteration = _
+            singular_values = np.linalg.svd(r_prev, compute_uv=False)
+            rounded_singular_values = np.round(singular_values, 4)
+            rank_r_prev = np.linalg.matrix_rank(r_prev)
+            
+            print(f"Iteration: {iteration}")
+            print(f"Singular values of r_prev (rounded to 4 decimal points): {rounded_singular_values}")
+            print(f"Rank of r_prev: {rank_r_prev}")
+            nu_prev = nu.value
+            Y_k = Y.value
+            Z_k = Z.value
+        else:
+            print("Optimization failed.")
+            break
+    
+    print("Final Status:", problem.status)
+    return r.value, nu.value
 
 
 
