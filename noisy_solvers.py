@@ -154,10 +154,9 @@ def solve_greedy_backward_bisection_noisy(gw, pi, b):
 def solve_PROBLEM_2_noisy(gw, U, sigmas, pi, b):
 
     n_features = U.shape[1]
-    print(n_features)
-
+    
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
-    print(f"The number of actions is {n_actions}")
+   
     model = gp.Model("Problem 2")
 
     # Decision variables
@@ -166,11 +165,10 @@ def solve_PROBLEM_2_noisy(gw, U, sigmas, pi, b):
     alpha = model.addVars(T, n_features, lb=float("-inf"),  vtype=GRB.CONTINUOUS, name="alpha")
     
     # Objective: Minimize sum of infinity norms (L∞ norm)
-    # model.setObjective(gp.quicksum(( (alpha[t, i] - alpha[t - 1, i]) ** 2) / (2 * sigmas[i] ** 2) for i in range(n_features) for t in range(1, T)), GRB.MINIMIZE)
-    model.setObjective(0, GRB.MINIMIZE)
-    # model.setParam(GRB.Param.NonConvex, 2)
+    model.setObjective(gp.quicksum(( (alpha[t, i] - alpha[t - 1, i]) ** 2) / (2 * sigmas[i] ** 2) for i in range(n_features) for t in range(1, T)), GRB.MINIMIZE)
+    # model.setObjective(0, GRB.MINIMIZE)
+    
     # Constraints
-
     # model.addConstr(alpha[0, 0] == 0)
     # model.addConstr(alpha[0, 1] == 1)
 
@@ -179,24 +177,34 @@ def solve_PROBLEM_2_noisy(gw, U, sigmas, pi, b):
             for a in range(n_actions):
                 model.addConstr(r[t, s, a] <= np.log(pi[t, s, a]) + b[t,s] + nu[t, s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)))
                 model.addConstr(r[t, s, a] >= np.log(pi[t, s, a]) - b[t,s] + nu[t, s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)))
-
                 model.addConstr(r[t, s, a] == gp.quicksum(U[s + a * n_states, i] * alpha[t, i] for i in range(n_features)))
                 
     # Add constraints for the last time step
     for s in range(n_states):
         for a in range(n_actions):
-            model.addConstr(r[T-1, s, a] >= np.log(pi[T-1, s, a]) - b[T-1,s] + nu[T-1, s]  )
-            model.addConstr(r[T-1, s, a] <= np.log(pi[T-1, s, a]) + b[T-1,s] + nu[T-1, s]  )
+            model.addConstr(r[T-1, s, a] <= np.log(pi[T-1, s, a]) + b[T-1, s] + nu[T-1, s]  )
+            model.addConstr(r[T-1, s, a] >= np.log(pi[T-1, s, a]) - b[T-1, s] + nu[T-1, s]  )
 
             model.addConstr(r[T-1, s, a] == gp.quicksum(U[s + a * n_states, i] * alpha[T-1, i] for i in range(n_features)))
 
-    # model.setParam('IterationLimit', 2e6)  # Increase iteration limit
+    
     model.setParam('OutputFlag', 1)  # Enable detailed output
+    model.setParam("IterationLimit", 1e8)
+    model.setParam("BarIterLimit", 1000 )  # Increase to a larger number
     model.optimize()
     # model.computeIIS()
     # model.write("model.ilp")
+    print("Status: ", model.status)
+   
+    # print("Iterations:", model.IterCount)  # Number of iterations
 
-    return extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features)
+    alpha_values = np.zeros((T, n_features))
+    for t in range(T):
+        for i in range(n_features):
+            alpha_values[t, i] = alpha[t, i].x
+    # print(alpha_values)
+
+    return alpha_values, extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features)
 
 def extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features):
     print(model.status)

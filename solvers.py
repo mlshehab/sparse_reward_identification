@@ -1,6 +1,6 @@
-# import gurobipy as gp
+import gurobipy as gp
 import cvxpy as cp
-# from gurobipy import GRB
+from gurobipy import GRB
 import numpy as np
 from scipy.linalg import sqrtm
 from scipy.linalg import fractional_matrix_power
@@ -342,54 +342,187 @@ def solve_greedy_backward_bisection_smaller(gw, pi):
     print(f"It took {n_iterations} iteration to solve")
     return r_values, nu_values, switch_times[::-1]
 
-def solve_greedy_linear_cvxpy(gw, pi): ### Does not work
-
+def solve_greedy_backward_bisection_L1_by_interval(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
 
-    tau = 0
+    tau = T
     switch_times = []
-    rewards_nu_list = []
-    for i in range(T-1):
-        ## Is feasible?
 
-        r = cp.Variable((n_states, n_actions), nonneg=True)
-        nu = cp.Variable((i+1-tau + 1, n_states), nonneg=True, name="nu")
+    i = T//2
+    inf_i = -1
+    sup_i = T
+
+    r_values = np.zeros((T, n_states, n_actions))
+    nu_values = np.zeros((T+1, n_states))
+
+
+    n_iterations = 0
+    while i >= 0:
+        n_iterations += 1
+        print(f"Testing from {i} to {T-1}. {tau=}. {inf_i=}, {sup_i=}")
+        ## Is feasible?
+        model = gp.Model("Feasible")
+        model.setParam("NumericFocus", 1)
+        model.setParam('OutputFlag', True)
+        # model.setObjective(gp., GRB.MINIMIZE)
+        r = model.addVars(n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+        nu = model.addVars(tau-i + 1, n_states, vtype=GRB.CONTINUOUS, name="nu")
+
+        model.setObjective(gp.quicksum(r[i,j] for i in range(n_states) for j in range(n_actions)), GRB.MINIMIZE)
 
         ### Reward constraints
-        constraints = []
-        for t in range(tau,i+1):
+        for t in range(i,tau):
             for s in range(n_states):
                 for a in range(n_actions):
-                    constraints.append(r[s, a] == (np.log(pi[t, s, a]) + nu[t-tau, s] -
-                                                 gamma * cp.sum(cp.multiply(P[a][s, :], nu[t+1-tau,:]))))
-        ### Nu consistency constraints
-        # if len(rewards_nu_list) > 0:
-        #     for s in range(n_states):
-        #         model.addConstr(nu[0,s] == rewards_nu_list[-1][1][-1,s], name=f"nu_consistency_{tau}_{switch_times[-1]}")
+                    model.addConstr(r[s, a] == np.log(pi[t, s, a]) + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
 
-        objective = cp.Minimize(0)
-        problem = cp.Problem(objective, constraints)
-        problem.solve(verbose=False)
+        for s in range(n_states):
+            model.addConstr(nu[tau-i, s] == nu_values[tau,s], name=f"r_def_{t}_{s}_{a}")        
 
-        if problem.status in ["optimal", "feasible"]:
-            r_values = np.zeros((n_states, n_actions))
-            nu_values = np.zeros((i+1-tau, n_states))
-            for t in range(tau,i+1):
+        model.optimize()
+        if model.Status == GRB.OPTIMAL:
+            for t in range(i, tau):
                 for s in range(n_states):
                     for a in range(n_actions):
-                        r_values[s, a] = r[s, a].value
+                        r_values[t, s, a] = r[s, a].x
                 for j in range(n_states):
-                    nu_values[t-tau, j] = nu[t-tau, j].value
+                    nu_values[t, j] = nu[t-i, j].x
+            
+                # for j in range(n_states):
+                #     nu_values[tau, j] = nu[tau-i, j].x           
+
+            sup_i = i
+            # if inf_i+1 == i and i>0:
+            #     switch_times += [i]
+            #     tau = i
+            #     inf_i = -1
+
         else:
-            switch_times += [i]
-            tau = i
-            rewards_nu_list.append((r_values,nu_values))
+            print(f"Infeasibility found. New tau={tau}")
+            if inf_i == i or sup_i == i + 1:
+                switch_times += [i+1]
+                tau = i+1
+                inf_i = -1
+                sup_i = i+1
+            else:
+                inf_i = i
+        i = (sup_i + inf_i)//2
 
-    if tau < T-2:
-        switch_times += [T-1]
-        rewards_nu_list.append((r_values,nu_values))    
+    print(f"It took {n_iterations} iteration to solve")
+    return r_values, nu_values, switch_times[::-1]
 
-    return switch_times, rewards_nu_list
+def solve_greedy_backward_bisection_L1_overall(gw, pi):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+
+    tau = T
+    switch_times = []
+
+    i = T//2
+    inf_i = -1
+    sup_i = T
+
+    r_values = np.zeros((T, n_states, n_actions))
+    nu_values = np.zeros((T+1, n_states))
+
+
+    n_iterations = 0
+    while i >= 0:
+        n_iterations += 1
+        print(f"Testing from {i} to {T-1}. {tau=}. {inf_i=}, {sup_i=}")
+        ## Is feasible?
+        model = gp.Model("Feasible")
+        model.setParam("NumericFocus", 1)
+        model.setParam('OutputFlag', False)
+        model.setObjective(0, GRB.MINIMIZE)
+        r = model.addVars(n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+        nu = model.addVars(tau-i + 1, n_states, vtype=GRB.CONTINUOUS, name="nu")
+
+        ### Reward constraints
+        for t in range(i,tau):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    model.addConstr(r[s, a] == np.log(pi[t, s, a]) + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+
+ 
+        for s in range(n_states):
+            model.addConstr(nu[tau-i, s] == nu_values[tau,s], name=f"r_def_{t}_{s}_{a}")        
+
+
+        model.optimize()
+        if model.Status == GRB.OPTIMAL:
+            for t in range(i, tau):
+                for s in range(n_states):
+                    for a in range(n_actions):
+                        r_values[t, s, a] = r[s, a].x
+                for j in range(n_states):
+                    nu_values[t, j] = nu[t-i, j].x       
+
+            sup_i = i
+        else:
+            print(f"Infeasibility found. New tau={tau}")
+            if inf_i == i or sup_i == i + 1:
+                switch_times += [i+1]
+                tau = i+1
+                inf_i = -1
+                sup_i = i+1
+            else:
+                inf_i = i
+        i = (sup_i + inf_i)//2
+
+    n_switches = len(switch_times[::-1])
+
+    def find_reward_interval(t):
+        i = 0 
+        while t >= (switch_times[::-1] + [T])[i]:
+            i += 1
+        return i
+
+    print(f"{n_switches=}")
+        ## Is feasible?
+    model = gp.Model("Feasible")
+    model.setParam("NumericFocus", 1)
+    model.setParam('OutputFlag', False)
+    r = model.addVars(n_switches + 1, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+    nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
+
+    model.setObjective(gp.quicksum(r[k, i,j] for i in range(n_states) for j in range(n_actions) for k in range(n_switches + 1)), GRB.MINIMIZE)
+
+    ### Reward constraints
+    for t in range(T-1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                model.addConstr(r[find_reward_interval(t), s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+        print(f"Reward interval of time {t}: {find_reward_interval(t)}")
+    
+    # interval_bounds = [0] + switch_times[::-1]
+    # for ind_st in range(len(interval_bounds)):
+    #     for t in range(interval_bounds[ind_st], interval_bounds[ind_st+1]):
+    #     for s in range(n_states):
+    #         for a in range(n_actions):
+    #         r[t]
+
+    for s in range(n_states):
+        for a in range(n_actions):
+            model.addConstr(r[n_switches, s, a] == np.log(pi[T-1, s, a]) + nu[T-1,s], name=f"r_def_{t}_{s}_{a}")
+  
+    model.optimize()
+    if model.status == GRB.OPTIMAL:
+        r_values = np.zeros((T, n_states, n_actions))
+        nu_values = np.zeros((T, n_states))
+        
+        for t in range(T):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    r_values[t, s, a] = r[find_reward_interval(t), s, a].x
+            for j in range(n_states):
+                nu_values[t, j] = nu[t, j].x
+        
+    else:
+        print("No optimal solution found.")
+
+
+    print(f"It took {n_iterations} iteration to solve")
+    return r_values, nu_values, switch_times[::-1]
 
 def solve_L_1(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
