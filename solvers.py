@@ -1,6 +1,6 @@
-# import gurobipy as gp
+import gurobipy as gp
 import cvxpy as cp
-# from gurobipy import GRB
+from gurobipy import GRB
 import numpy as np
 from scipy.linalg import sqrtm
 from scipy.linalg import fractional_matrix_power

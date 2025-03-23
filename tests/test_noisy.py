@@ -8,7 +8,6 @@ from noisy_solvers import solve_milp_noisy, solve_greedy_backward_bisection_nois
 from dynamics import BasicGridWorld
 from utils.bellman import soft_bellman_operation
 
-# from /dynamic_irl.src.envs  import  gridworld
 
 NUMBER_OF_EXPERIMENTS = 1
 NUMBER_OF_FEATURES = 7
@@ -22,8 +21,7 @@ def test_greedy():
     discount = 0.9
     horizon = 30
     reward = 1
-    start_state = 10
-    # np.random.seed(0)
+    np.random.seed(1)
     for number_of_switches in [2]:
         for _ in range(NUMBER_OF_EXPERIMENTS):
             gw = BasicGridWorld(grid_size, wind, discount, horizon, reward)
@@ -50,8 +48,8 @@ def test_greedy():
             alpha = pi.min()
             print(f"{alpha=}")
             print(f"{gw.n_actions=}")
-            delta = 1-1e-7
-            NUM_SAMPLES = 5000
+            delta = 1-1e-3
+            NUM_SAMPLES = 10000
             for t in range(gw.horizon):
                 for s in range(gw.n_states):
                     # Sample NUM_SAMPLES actions from the distribution pi[t, s, :]
@@ -63,20 +61,36 @@ def test_greedy():
                     # Normalize to get empirical distribution
                     pi_hat[t, s, :] = counts / NUM_SAMPLES
             
-            epsilon = 2/(NUM_SAMPLES*alpha)*np.log((2**(gw.n_actions)-2)/(1-delta))
-            b = np.ones(shape=(gw.horizon, gw.n_states))*epsilon
-            print(f"{b[0][0]=}")
-            print("Ratio of bound exceeds:")
-            # print(np.log(pi)-np.log(pi_hat))
 
-            print(np.sum(np.abs(np.log(pi)-np.log(pi_hat)) > b[0,0])/gw.horizon/gw.n_states/gw.n_actions)
+            epsilon = np.sqrt(2/NUM_SAMPLES * np.log((2**(gw.n_actions)-2)/(1-delta)))
+
+            new_epsilon = np.sqrt(1/(2*NUM_SAMPLES) * np.log((2/(1-delta))))
+
+
+            print(f"{epsilon=}")
+            print(f"{new_epsilon=}")
+            b = np.ones(shape=(gw.horizon, gw.n_states))*new_epsilon/alpha
+            print(f"{epsilon/alpha=}")
+            print(f"{new_epsilon/alpha=}")
+
+            print(f"{gw.horizon*gw.n_states*gw.n_actions}")
+            print("Ratio of bound exceeds:")
+            print(np.sum(np.abs(pi-pi_hat) > epsilon)/gw.horizon/gw.n_states/gw.n_actions)            
+            print("Ratio of bound exceeds - new epsilon:")
+            print(np.sum(np.abs(pi-pi_hat) > new_epsilon)/gw.horizon/gw.n_states/gw.n_actions)      
+
+
+            print("Ratio of bound exceeds - log:")
+            print(np.sum(np.abs(np.log(pi)-np.log(pi_hat)) > epsilon/alpha)/gw.horizon/gw.n_states/gw.n_actions)
+
+
 
             start_time = time.time()
             r_milp, nu_milp, z = solve_milp_noisy(gw, pi_hat, b)
             print(r_milp.shape, nu_milp.shape)
             print(f"MILP done in {time.time() - start_time:.2f} seconds")
 
-            if check_feasibility(gw, pi, r_milp, nu_milp):
+            if check_feasibility(gw, pi_hat, r_milp, nu_milp, b):
                 print("MILP solution is feasible")
             else:
                 print("MILP solution is infeasible")
@@ -91,12 +105,12 @@ def test_greedy():
             print(f"Greedy-Linear done in {time.time() - start_time:.2f} seconds")
 
 
-            if check_feasibility(gw, pi, r_greedy, nu_greedy):
+            if check_feasibility(gw, pi_hat, r_greedy, nu_greedy, b):
                 print("Greedy solution is feasible")
             else:
                 print("Greedy solution is infeasible")
                 print("Checking feasibility of rewards only")
-                if check_feasibility_reward(gw, pi, r_greedy):
+                if check_feasibility_reward(gw, pi_hat, r_greedy, b):
                     print("Greedy solution is REWARD feasible")
                 else:
                     print("Greedy solution is not even REWARD feasible")
@@ -163,7 +177,7 @@ def test_greedy_alpha():
             print("Computed alpha values:", [alpha_greedy[i] for i in [0]+switch_times])
 
 
-def check_feasibility_reward(gw, pi, r):
+def check_feasibility_reward(gw, pi, r, b):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
 
     model = gp.Model("MILP")
@@ -179,7 +193,8 @@ def check_feasibility_reward(gw, pi, r):
         for s in range(n_states):
             for a in range(n_actions):
                 # model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
-                model.addConstr(nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)) == r[t, s, a]-np.log(pi[t, s, a]), name=f"r_def_{t}_{s}_{a}")
+                model.addConstr(nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)) <= r[t, s, a]-np.log(pi[t, s, a]) + b[t,s], name=f"r_def_{t}_{s}_{a}")
+                model.addConstr(nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)) >= r[t, s, a]-np.log(pi[t, s, a]) - b[t,s], name=f"r_def_{t}_{s}_{a}")
     
     # Solve the model
     model.optimize()
@@ -188,13 +203,17 @@ def check_feasibility_reward(gw, pi, r):
     return model.status == GRB.OPTIMAL
 
 
-def check_feasibility(gw, pi, r, nu):
+def check_feasibility(gw, pi, r, nu, b):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    epsilon = 1e-7
     # Constraints
     for t in range(T-1):
         for s in range(n_states):
             for a in range(n_actions):
-                if not np.isclose(r[t, s, a],np.log(pi[t, s, a]) + nu[t,s] 
+                if not (r[t, s, a] - epsilon <= np.log(pi[t, s, a]) + b[t, s] + nu[t,s] 
+                               - gamma * np.sum([P[a][s, j] * nu[t+1, j] for j in range(n_states)])):
+                    return False
+                elif not (r[t, s, a] + epsilon >= np.log(pi[t, s, a]) - b[t, s] + nu[t,s] 
                                   - gamma * np.sum([P[a][s, j] * nu[t+1, j] for j in range(n_states)])):
                     return False
         print(f"Time {t} is feasible")
@@ -202,7 +221,9 @@ def check_feasibility(gw, pi, r, nu):
     # Add constraints for the last time step
     for s in range(n_states):
         for a in range(n_actions):
-            if not np.isclose(r[T-1, s, a], np.log(pi[T-1, s, a]) + nu[T-1, s]):
+            if not (r[T-1, s, a] <= np.log(pi[T-1, s, a]) + b[T-1, s] + nu[T-1, s]):
+                return False
+            elif not (r[T-1, s, a] >= np.log(pi[T-1, s, a]) - b[T-1, s] + nu[T-1, s]):
                 return False
     print(f"Time {T-1} is feasible")
     return True     
