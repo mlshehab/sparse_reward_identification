@@ -21,7 +21,7 @@ def test_greedy():
     discount = 0.9
     horizon = 30
     reward = 1
-    np.random.seed(1)
+    # np.random.seed(1)
     for number_of_switches in [2]:
         for _ in range(NUMBER_OF_EXPERIMENTS):
             gw = BasicGridWorld(grid_size, wind, discount, horizon, reward)
@@ -69,9 +69,10 @@ def test_greedy():
 
             print(f"{epsilon=}")
             print(f"{new_epsilon=}")
-            b = np.ones(shape=(gw.horizon, gw.n_states))*new_epsilon/alpha
+            b = np.ones(shape=(gw.horizon, gw.n_states))*new_epsilon/(alpha-new_epsilon)
             print(f"{epsilon/alpha=}")
             print(f"{new_epsilon/alpha=}")
+            print(f"{new_epsilon/(alpha-new_epsilon)=}")
 
             print(f"{gw.horizon*gw.n_states*gw.n_actions}")
             print("Ratio of bound exceeds:")

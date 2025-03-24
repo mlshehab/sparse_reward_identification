@@ -11,21 +11,21 @@ import time
 import datetime
 import matplotlib.pyplot as plt
 
-path_to_dynamic_irl = '~\Desktop'
-repo2_path = os.path.expanduser(path_to_dynamic_irl)  # Adjust path if necessary
-sys.path.append(repo2_path)
+# path_to_dynamic_irl = '~\Desktop'
+# repo2_path = os.path.expanduser(path_to_dynamic_irl)  # Adjust path if necessary
+# sys.path.append(repo2_path)
 
-repo2_path = os.path.expanduser("~/Desktop/dynamic_irl")  # Adjust the path to your setup
-if repo2_path not in sys.path:
-    sys.path.append(repo2_path)
+# repo2_path = os.path.expanduser("~/Desktop/dynamic_irl")  # Adjust the path to your setup
+# if repo2_path not in sys.path:
+#     sys.path.append(repo2_path)
 
-repo2_path = os.path.expanduser("~/Desktop/dynamic_irl/src")  # Adjust the path to your setup
-if repo2_path not in sys.path:
-    sys.path.append(repo2_path)
+# repo2_path = os.path.expanduser("~/Desktop/dynamic_irl/src")  # Adjust the path to your setup
+# if repo2_path not in sys.path:
+#     sys.path.append(repo2_path)
 
-repo2_path = os.path.expanduser("~/Desktop/dynamic_irl/src/optimize_weights")  # Adjust the path to your setup
-if repo2_path not in sys.path:
-    sys.path.append(repo2_path)
+# repo2_path = os.path.expanduser("~/Desktop/dynamic_irl/src/optimize_weights")  # Adjust the path to your setup
+# if repo2_path not in sys.path:
+#     sys.path.append(repo2_path)
 
 
 # import dynamic_irl
@@ -36,8 +36,8 @@ if repo2_path not in sys.path:
 # from dynamic_irl.src.simulate_data_gridworld import create_goal_maps
 # from dynamic_irl.src.dirl_for_gridworld import fit_dirl_gridworld
 
-from main import run_methods, plot_results
-from solvers import solve_PROBLEM_2, solve_PROBLEM_3
+# from main import run_methods, plot_results
+from solvers import solve_PROBLEM_2, solve_PROBLEM_2_cvxpy, solve_PROBLEM_3
 
 def generate_weight_trajectories(sigmas, weights0, T):
     '''Simulates time varying weights, for a given sigmas array
@@ -73,11 +73,11 @@ def plot_time_varying_weights(true_weights, recovered_weights, T):
     - T: int, number of time steps
     """
     # Enable LaTeX rendering
-    plt.rcParams.update({
-        "text.usetex": True,  # Use LaTeX for text rendering
-        "font.family": "serif",  # Use a serif font
-        "font.serif": ["Computer Modern"],  # Default LaTeX font
-    })
+    # plt.rcParams.update({
+    #     "text.usetex": True,  # Use LaTeX for text rendering
+    #     "font.family": "serif",  # Use a serif font
+    #     "font.serif": ["Computer Modern"],  # Default LaTeX font
+    # })
     plt.figure(figsize=(12, 6))
 
     # Plot weight 0 (reward at home state)
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     # print(true_reward)
     V, Q, pi = soft_bellman_operation(gw, true_reward)
     
-    alpha_values, sol  = solve_PROBLEM_2(gw, U, sigmas, pi)
+    alpha_values, sol  = solve_PROBLEM_2_cvxpy(gw, U, sigmas, pi)
 
   
     plot_time_varying_weights(time_varying_weights, alpha_values, T)
