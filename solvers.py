@@ -1,6 +1,6 @@
-import gurobipy as gp
+# import gurobipy as gp
 import cvxpy as cp
-from gurobipy import GRB
+# from gurobipy import GRB
 import numpy as np
 from scipy.linalg import sqrtm
 from scipy.linalg import fractional_matrix_power
@@ -672,7 +672,7 @@ def solve_PROBLEM_2(gw, U, sigmas, pi):
     model.setParam('OutputFlag', 1)  # Enable detailed output
     model.setParam("IterationLimit", 1e8)
     model.setParam("BarIterLimit", 1000 )  # Increase to a larger number
-    model.optimize()
+    model.optimize(solver = cp.MOSEK, verbose = True)
     # model.computeIIS()
     # model.write("model.ilp")
     print("Status: ", model.status)
@@ -687,7 +687,39 @@ def solve_PROBLEM_2(gw, U, sigmas, pi):
 
     return alpha_values, extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features)
 
-
+def solve_PROBLEM_2_CP(U, pi, gw, sigmas):
+    n_features = U.shape[1]
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    
+    # Decision variables
+    r = cp.Variable((T, n_states, n_actions))
+    nu = cp.Variable((T, n_states))
+    alpha = cp.Variable((T, n_features))
+    
+    # Objective: Minimize sum of squared differences (L2 norm proxy for smoothness)
+    objective = cp.Minimize(cp.sum([(cp.square(alpha[t, :] - alpha[t - 1, :]) / (2 * sigmas ** 2)) for t in range(1, T)]))
+    
+    # Constraints
+    constraints = []
+    for t in range(T - 1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                constraints.append(r[t, s, a] == np.log(pi[t, s, a]) + nu[t, s] - gamma * cp.sum(P[a][s, j] * nu[t+1, j] for j in range(n_states)))
+                constraints.append(r[t, s, a] == U[s + a * n_states, :] @ alpha[t, :])
+    
+    # Add constraints for the last time step
+    for s in range(n_states):
+        for a in range(n_actions):
+            constraints.append(r[T-1, s, a] == np.log(pi[T-1, s, a]) + nu[T-1, s])
+            constraints.append(r[T-1, s, a] == U[s + a * n_states, :] @ alpha[T-1, :])
+    
+    # Solve the optimization problem
+    problem = cp.Problem(objective, constraints)
+    problem.solve(solver=cp.MOSEK, verbose=True)
+    
+    # Extract solution
+    alpha_values = alpha.value
+    return alpha_values, (r.value, nu.value, alpha_values)
 
 def solve_PROBLEM_3(gw, U, sigmas, pi):
     import cvxpy as cp

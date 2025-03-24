@@ -28,12 +28,12 @@ if repo2_path not in sys.path:
     sys.path.append(repo2_path)
 
 
-import dynamic_irl
+# import dynamic_irl
 
-from dynamic_irl.src.envs  import  gridworld
+# from dynamic_irl.src.envs  import  gridworld
 
-from dynamic_irl.src.simulate_data_gridworld import generate_expert_trajectories
-from dynamic_irl.src.simulate_data_gridworld import create_goal_maps
+# from dynamic_irl.src.simulate_data_gridworld import generate_expert_trajectories
+# from dynamic_irl.src.simulate_data_gridworld import create_goal_maps
 # from dynamic_irl.src.dirl_for_gridworld import fit_dirl_gridworld
 
 from main import run_methods, plot_results
