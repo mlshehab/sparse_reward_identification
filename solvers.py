@@ -688,6 +688,52 @@ def solve_PROBLEM_2(gw, U, sigmas, pi):
     return alpha_values, extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features)
 
 
+def solve_PROBLEM_2_cvxpy(gw, U, sigmas, pi):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    n_features = U.shape[1]
+
+    # Decision variables
+    r = cp.Variable((T, n_states * n_actions))  # Flattened r
+    nu = cp.Variable((T, n_states))
+    alpha = cp.Variable((T, n_features))
+
+    constraints = []
+
+    # Constraints for t in 0 to T-2
+    for t in range(T - 1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                idx = s + a * n_states
+                trans_term = gamma * cp.sum(cp.multiply(P[a][s, :], nu[t + 1, :]))
+
+                constraints.append(r[t, idx] == np.log(pi[t, s, a]) + nu[t, s] - trans_term)
+                constraints.append(r[t, idx] == U[idx, :] @ alpha[t, :])
+
+    # Constraints for the last timestep
+    for s in range(n_states):
+        for a in range(n_actions):
+            idx = s + a * n_states
+            constraints.append(r[T - 1, idx] == np.log(pi[T - 1, s, a]) + nu[T - 1, s])
+            constraints.append(r[T - 1, idx] == U[idx, :] @ alpha[T - 1, :])
+
+    # Objective: Minimize sum of squared differences weighted by sigma
+    objective = cp.Minimize(cp.sum(
+        [(alpha[t, i] - alpha[t - 1, i]) ** 2 / (2 * sigmas[i] ** 2)
+         for i in range(n_features) for t in range(1, T)]
+    ))
+
+    problem = cp.Problem(objective, constraints)
+    problem.solve(solver=cp.MOSEK, verbose=True)
+
+    if problem.status == cp.OPTIMAL:
+        print("Problem solved to optimality.")
+    else:
+        print("Solver did not reach optimality. Status:", problem.status)
+
+    alpha_values = alpha.value
+    r_reshaped = r.value.reshape(T, n_actions, n_states).transpose(0, 2, 1)  # Convert to (T, n_states, n_actions)
+
+    return alpha_values, (r_reshaped, nu.value, alpha_values)  # Placeholder for extract_solution
 
 def solve_PROBLEM_3(gw, U, sigmas, pi):
     import cvxpy as cp

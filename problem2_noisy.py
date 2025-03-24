@@ -37,7 +37,7 @@ import matplotlib.pyplot as plt
 # # from dynamic_irl.src.dirl_for_gridworld import fit_dirl_gridworld
 
 # from main import run_methods, plot_results
-from noisy_solvers import solve_PROBLEM_2_noisy#, solve_PROBLEM_3
+from noisy_solvers import solve_PROBLEM_2_noisy, solve_PROBLEM_2_noisy_cvxpy#, solve_PROBLEM_3
 from solvers import solve_PROBLEM_2
 
 def generate_weight_trajectories(sigmas, weights0, T):
@@ -221,7 +221,9 @@ if __name__ == "__main__":
 
     print(f"{epsilon=}")
     print(f"{new_epsilon=}")
-    b = np.ones(shape=(gw.horizon, gw.n_states))*new_epsilon/alpha
+    b = np.ones(shape=(gw.horizon, gw.n_states))*new_epsilon/(alpha-new_epsilon)
+    # b = np.ones(shape=(gw.horizon, gw.n_states))*new_epsilon/(alpha)
+
     print(f"{epsilon/alpha=}")
     print(f"{new_epsilon/alpha=}")
 
@@ -235,7 +237,9 @@ if __name__ == "__main__":
     print("Ratio of bound exceeds - log:")
     print(np.sum(np.abs(np.log(pi)-np.log(pi_hat)) > epsilon/alpha)/gw.horizon/gw.n_states/gw.n_actions)
     
-    alpha_values, *sol  = solve_PROBLEM_2_noisy(gw, U, sigmas, pi, np.ones_like(b)*1e-4)
+    # alpha_values, *sol  = solve_PROBLEM_2_noisy(gw, U, sigmas, pi, np.ones_like(b)*1e-4)
+    alpha_values, *sol  = solve_PROBLEM_2_noisy_cvxpy(gw, U, sigmas, pi_hat, b)
+
     # alpha_values, *sol  = solve_PROBLEM_2(gw, U, sigmas, pi)#, np.ones_like(b)*1e-4)
 
   
