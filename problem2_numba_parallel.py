@@ -121,76 +121,71 @@ def plot_time_varying_weights(true_weights, recovered_weights, T):
     plt.savefig(f"results/noisy/problem2/feas_time_varying_weights_{timestamp}.png", dpi=300, bbox_inches='tight')
 
 
-def estimate_pi_and_visits(P, pi, s0, H, NUM_TRAJECTORIES):
-    """
-    Estimate empirical policy (pi_hat) and state visit counts from sampled trajectories.
+import numpy as np
+from numba import njit, prange
 
-    Args:
-        P: shape (A, S, S) - transition probabilities
-        pi: shape (H, S, A) - policy
-        s0: int - fixed initial state
-        H: int - horizon
-        NUM_TRAJECTORIES: number of trajectories
+@njit(parallel=True)
+def sample_categorical_parallel(prob_matrix, rand_vals):
+    N, K = prob_matrix.shape
+    samples = np.empty(N, dtype=np.int32)
+    for i in prange(N):
+        cum_sum = 0.0
+        for k in range(K):
+            cum_sum += prob_matrix[i, k]
+            if rand_vals[i] < cum_sum:
+                samples[i] = k
+                break
+    return samples
 
-    Returns:
-        pi_hat: shape (H, S, A) - empirical action distribution
-        visit_counts: shape (H, S) - state visit counts at each time
-    """
-    P = np.array(P)
+@njit(parallel=True)
+def estimate_pi_and_visits_numba(P, pi, H, NUM_TRAJECTORIES):
+    A, S, _ = P.shape
 
-    S = P.shape[1]
-    A = P.shape[0]
-
-    # Preallocate visit counts and empirical policy
     visit_counts = np.zeros((H, S), dtype=np.int32)
     action_counts = np.zeros((H, S, A), dtype=np.int32)
 
-    # Trajectory data
     states = np.empty((NUM_TRAJECTORIES, H + 1), dtype=np.int32)
     actions = np.empty((NUM_TRAJECTORIES, H), dtype=np.int32)
 
-    # Initialize all trajectories at s0
-    states[:, 0] = s0
+    # Sample initial states from uniform distribution
+    rand_init = np.random.rand(NUM_TRAJECTORIES)
+    for i in prange(NUM_TRAJECTORIES):
+        states[i, 0] = int(rand_init[i] * S)
 
     for t in range(H):
-        print("Timestep: ", t)
         s_t = states[:, t]
+        action_probs = np.empty((NUM_TRAJECTORIES, A))
+        for i in prange(NUM_TRAJECTORIES):
+            action_probs[i, :] = pi[t, s_t[i], :]
 
-        # Sample actions
-        action_probs = pi[t, s_t, :]
-        random_vals = np.random.rand(NUM_TRAJECTORIES)
-        cum_probs = np.cumsum(action_probs, axis=1)
-        a_t = (random_vals[:, None] < cum_probs).argmax(axis=1)
-
+        rand_actions = np.random.rand(NUM_TRAJECTORIES)
+        a_t = sample_categorical_parallel(action_probs, rand_actions)
         actions[:, t] = a_t
 
-        # Update visit and action counts
+        # Use serial loop for safe accumulation (parallelism handled per timestep)
         for i in range(NUM_TRAJECTORIES):
             s = s_t[i]
             a = a_t[i]
             visit_counts[t, s] += 1
             action_counts[t, s, a] += 1
 
-        # Sample next state
-        next_state_probs = P[a_t, s_t, :]
-        random_vals = np.random.rand(NUM_TRAJECTORIES)
-        cum_probs = np.cumsum(next_state_probs, axis=1)
-        s_next = (random_vals[:, None] < cum_probs).argmax(axis=1)
+        next_state_probs = np.empty((NUM_TRAJECTORIES, S))
+        for i in prange(NUM_TRAJECTORIES):
+            next_state_probs[i, :] = P[a_t[i], s_t[i], :]
 
+        rand_next = np.random.rand(NUM_TRAJECTORIES)
+        s_next = sample_categorical_parallel(next_state_probs, rand_next)
         states[:, t + 1] = s_next
 
-    # Normalize to get empirical policy
-    pi_hat = np.zeros_like(pi)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        pi_hat = np.divide(action_counts, visit_counts[:, :, None], where=visit_counts[:, :, None] != 0)
+    return action_counts, visit_counts
 
-    return pi_hat, visit_counts
+
 
 
 if __name__ == "__main__":
     
     # np.random.seed(int(time.time()))
-    np.random.seed(0)
+    np.random.seed(1)
 
     grid_size = 5
     wind = 0.1
@@ -207,6 +202,7 @@ if __name__ == "__main__":
     gridworld_W = 5
     T = 50
     GAMMA = 0.9
+    NUM_TRAJECTORIES = 1_000_000
    
 
     # select number of maps
@@ -262,32 +258,38 @@ if __name__ == "__main__":
 
 
     ## Sample from pi to obtain demonstration
-    pi_hat = np.zeros_like(pi)
-    alpha = pi.min()
-    print(f"{alpha=}")
-    print(f"{gw.n_actions=}")
+
+    r_min = true_reward.min()
+    r_max = true_reward.max()
+
+    
+    # alpha = (1 / gw.n_actions) * np.exp(
+    #     ((1 - GAMMA**T) * (r_min - r_max - np.log(gw.n_actions))) / (1 - GAMMA)
+    # )
+
     delta = 1-1e-4
-    NUM_SAMPLES = 50_000_000
-    for t in range(gw.horizon):
-        for s in range(gw.n_states):
-            # Count occurrences of each action
-            counts = np.random.multinomial(NUM_SAMPLES, pi[t, s, :])    
-            
-            # Normalize to get empirical distribution
-            pi_hat[t, s, :] = counts / NUM_SAMPLES
 
-    # epsilon = np.sqrt(2/NUM_SAMPLES * np.log((2**(gw.n_actions)-2)/(1-delta)))
+    P = np.asarray(gw.P, dtype=np.float64)     # shape (A, S, S)
+    pi = np.asarray(pi, dtype=np.float64)   # shape (H, S, A)
+    action_counts, visit_counts = estimate_pi_and_visits_numba(P, pi, gw.horizon, NUM_TRAJECTORIES)
 
-    new_epsilon = np.sqrt(1/(2*NUM_SAMPLES) * np.log((2/(1-delta))))
+    if (visit_counts == 0).any():
+        print("Still there are t,s pairs not visited")
 
+    # Normalize to get pi_hat
+    pi_hat = np.zeros_like(pi)/gw.n_actions
+    with np.errstate(divide='ignore', invalid='ignore'):
+        pi_hat = np.divide(action_counts, visit_counts[:, :, None], where=visit_counts[:, :, None] != 0)
 
-    pi_hat, visit_counts = estimate_pi_and_visits(gw.P, pi, start_state, gw.horizon, 100_000_00)
+    print(f"pi hat shape {pi_hat.shape}, number of ones {(pi_hat == 0.).sum()}")
+    print((np.isclose(pi_hat.sum(axis=2), 1.)).sum())
+
     # Ensure all (t, s) pairs were visited
     assert np.all(visit_counts > 0), "Some (t, s) pairs have zero visits!"
 
     log_term = np.log(2 / (1 - delta))
 
-    b = np.full((gw.horizon, gw.n_states), np.inf)  # default to inf for unvisited
+    b = np.full((gw.horizon, gw.n_states), 1e3)  # default to inf for unvisited
 
     # Where visits > 0, compute epsilon and b
     visited_mask = visit_counts > 0
@@ -295,6 +297,13 @@ if __name__ == "__main__":
     epsilons[visited_mask] = np.sqrt(1 / (2 * visit_counts[visited_mask]) * log_term)
 
     # Compute b where valid
+
+    sum_array = pi_hat - epsilons[:, :, np.newaxis]
+    # Find the minimal value
+    alpha = np.min(sum_array)
+
+    print(f"{alpha=}, {pi.min()=}, {pi_hat.min()=}")
+
     b[visited_mask] = epsilons[visited_mask] / (alpha - epsilons[visited_mask])
 
 
@@ -310,27 +319,11 @@ if __name__ == "__main__":
 
     # print(f"{epsilon=}")
     print(f"{epsilons.max()=}")
-    # b = np.ones(shape=(gw.horizon, gw.n_states))*new_epsilon/(alpha-new_epsilon)
-    # b = np.ones(shape=(gw.horizon, gw.n_states))*new_epsilon/(alpha)
-
-    # print(f"{epsilon/alpha=}")
-    # print(f"{new_epsilon/alpha=}")
+    print(f"{epsilons.min()=}")
 
 
-    # print(f"{gw.horizon*gw.n_states*gw.n_actions}")
-    # print("Ratio of bound exceeds:")
-    # print(np.sum(np.abs(pi-pi_hat) > epsilon)/gw.horizon/gw.n_states/gw.n_actions)            
-    # print("Ratio of bound exceeds - new epsilon:")
-    # print(np.sum(np.abs(pi-pi_hat) > new_epsilon)/gw.horizon/gw.n_states/gw.n_actions)      
+    # alpha_values, *sol  = solve_PROBLEM_2_noisy_cvxpy(gw, U, sigmas, pi_hat, b)
 
-
-    # print("Ratio of bound exceeds - log:")
-    # print(np.sum(np.abs(np.log(pi)-np.log(pi_hat)) > epsilon/alpha)/gw.horizon/gw.n_states/gw.n_actions)
+    # np.save(f"alpha_values_{NUM_TRAJECTORIES}.npy", alpha_values)
     
-    # alpha_values, *sol  = solve_PROBLEM_2_noisy(gw, U, sigmas, pi, np.ones_like(b)*1e-4)
-    alpha_values, *sol  = solve_PROBLEM_2_noisy_cvxpy(gw, U, sigmas, pi_hat, b)
-
-    # alpha_values, *sol  = solve_PROBLEM_2(gw, U, sigmas, pi)#, np.ones_like(b)*1e-4)
-
-  
-    plot_time_varying_weights(time_varying_weights, alpha_values, T)
+    # plot_time_varying_weights(time_varying_weights, alpha_values, T)
