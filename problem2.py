@@ -73,32 +73,33 @@ def plot_time_varying_weights(true_weights, recovered_weights, T):
     - T: int, number of time steps
     """
     # Enable LaTeX rendering
-    # plt.rcParams.update({
-    #     "text.usetex": True,  # Use LaTeX for text rendering
-    #     "font.family": "serif",  # Use a serif font
-    #     "font.serif": ["Computer Modern"],  # Default LaTeX font
-    # })
+    plt.rcParams.update({
+        "text.usetex": True,  # Use LaTeX for text rendering
+        "font.family": "serif",  # Use a serif font
+        "font.serif": ["Computer Modern"],  # Default LaTeX font
+    })
     plt.figure(figsize=(12, 6))
 
     # Plot weight 0 (reward at home state)
     plt.figure(figsize=(14, 7), dpi=150)  # Increase figure size and DPI for better quality
     plt.subplot(1, 2, 1)
-    plt.plot(range(T), true_weights[:, 0], label='True Reward at Home State', linestyle='--', linewidth=2)
-    plt.plot(range(T), recovered_weights[:, 0], label='Recovered Reward at Home State', linewidth=2)
-    plt.xlabel('Time', fontsize=12)
-    plt.ylabel('Weight', fontsize=12)
-    plt.title('Time-Varying Weight for Home State', fontsize=14)
-    plt.legend(fontsize=10)
+    
+    plt.plot(range(T), recovered_weights[:, 0], label=r'\textbf{Recovered Reward at Home State}', marker = 's', linestyle = '--', linewidth=1.5)
+    plt.plot(range(T), true_weights[:, 0],'--o', label=r'\textbf{True Reward at Home State}', linewidth=2)
+    plt.xlabel(r'\textbf{Time}', fontsize=16)
+    plt.ylabel(r'\textbf{Weight}', fontsize=16)
+    plt.title(r'\textbf{Time-Varying Weight for Home State}', fontsize=18)
+    plt.legend(fontsize=14)
     plt.grid(True, linestyle='--', alpha=0.7)  # Add grid for better readability
 
     # Plot weight 1 (reward at water state)
     plt.subplot(1, 2, 2)
-    plt.plot(range(T), true_weights[:, 1], label='True Reward at Water State', linestyle='--', linewidth=2)
-    plt.plot(range(T), recovered_weights[:, 1], label='Recovered Reward at Water State', linewidth=2)
-    plt.xlabel('Time', fontsize=12)
-    plt.ylabel('Weight', fontsize=12)
-    plt.title('Time-Varying Weight for Water State', fontsize=14)
-    plt.legend(fontsize=10)
+    plt.plot(range(T), recovered_weights[:, 1], label=r'\textbf{Recovered Reward at Water State}', linestyle = '--', marker = 's', linewidth=1.5)
+    plt.plot(range(T), true_weights[:, 1],'--o', label=r'\textbf{True Reward at Water State}', linewidth=2)
+    plt.xlabel(r'\textbf{Time}', fontsize=16)
+    plt.ylabel(r'\textbf{Weight}', fontsize=16)
+    plt.title(r'\textbf{Time-Varying Weight for Water State}', fontsize=18)
+    plt.legend(fontsize=14)
     plt.grid(True, linestyle='--', alpha=0.7)  # Add grid for better readability
 
     plt.tight_layout()
@@ -117,8 +118,7 @@ def plot_time_varying_weights(true_weights, recovered_weights, T):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Save the figure with a timestamp
-    plt.savefig(f"results/problem2/feas_time_varying_weights_{timestamp}.png", dpi=300, bbox_inches='tight')
-
+    plt.savefig(f"results/problem2/exp2.png", dpi=300, bbox_inches='tight')
 
 if __name__ == "__main__":
     
