@@ -58,7 +58,7 @@ def generate_weight_trajectories(sigmas, weights0, T):
     # # water port
     # # np.random.seed(100)
     # noise[:,1] = np.random.normal(-0.02, scale=sigmas[1], size=(T,))
-    noise[0,:] = weights0
+    # noise[0,:] = weights0
     weights = np.cumsum(noise, axis=0)
     return weights #array of size (TxK)
 
@@ -193,6 +193,28 @@ if __name__ == "__main__":
     V, Q, pi = soft_bellman_operation(gw, true_reward)
     
     alpha_values, sol  = solve_PROBLEM_2_cvxpy(gw, U, sigmas, pi)
+
+
+    r_recovered_reshaped =  np.zeros((gw.horizon, gw.n_states , gw.n_actions))
+    for t in range(gw.horizon):
+        for s in range(gw.n_states):
+             for a in range(gw.n_actions):
+                    r_recovered_reshaped[t, s, a] = U[s + a * gw.n_states,0] * alpha_values[t,0] \
+                        + U[s + a * gw.n_states, 1] * alpha_values[t,1]
+    
+    # Find the policy for r_recovered
+    V_recovered, Q_recovered, pi_recovered = soft_bellman_operation(gw, r_recovered_reshaped)
+
+    # Calculate the norm difference between the true policy and the recovered policy
+    for t in range(gw.horizon):
+        norm_difference = np.linalg.norm(pi[t] - pi_recovered[t])
+        assert norm_difference < 1e-6, f"Norm difference between the true policy and the recovered policy at time step {t}: {norm_difference}"
+
+
+
+
+
+
 
   
     plot_time_varying_weights(time_varying_weights, alpha_values, T)

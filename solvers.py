@@ -5,7 +5,7 @@ import numpy as np
 from scipy.linalg import sqrtm
 from scipy.linalg import fractional_matrix_power
 import scipy.linalg
-
+import time
 def solve_milp(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     # Create Gurobi model
@@ -720,7 +720,8 @@ def solve_PROBLEM_2_cvxpy(gw, U, sigmas, pi):
     objective = cp.Minimize(cp.sum(
         [(alpha[t, i] - alpha[t - 1, i]) ** 2 / (2 * sigmas[i] ** 2)
          for i in range(n_features) for t in range(1, T)]
-    ))
+    ) + cp.sum([alpha[0, i] ** 2/ (2 * sigmas[i] ** 2) for i in range(n_features)]))
+    # objective = cp.Minimize(0)
 
     problem = cp.Problem(objective, constraints)
     problem.solve(solver=cp.MOSEK, verbose=True)
@@ -736,8 +737,7 @@ def solve_PROBLEM_2_cvxpy(gw, U, sigmas, pi):
     return alpha_values, (r_reshaped, nu.value, alpha_values)  # Placeholder for extract_solution
 
 def solve_PROBLEM_3(gw, U, sigmas, pi):
-    import cvxpy as cp
-    import numpy as np
+    
 
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     n_features = U.shape[1]
@@ -767,7 +767,7 @@ def solve_PROBLEM_3(gw, U, sigmas, pi):
     
     # Solve the problem
     problem = cp.Problem(objective, constraints)
-    problem.solve(solver=cp.SCS, verbose=False)
+    problem.solve(solver=cp.MOSEK, verbose=False)
     
     print("Status:", problem.status)
     
@@ -834,7 +834,7 @@ def solve_PROBLEM_3_RNNM(gw, U, sigmas, pi, max_iter=10, delta= 1e-4):
 
 
 
-def solve_PROBLEM_3_RTH(gw, U, sigmas, pi, max_iter=10, delta=1e-4):
+def solve_PROBLEM_3_RTH(gw, U, sigmas, pi, max_iter=2, delta=1e-4):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     n_features = U.shape[1]
     
@@ -846,6 +846,9 @@ def solve_PROBLEM_3_RTH(gw, U, sigmas, pi, max_iter=10, delta=1e-4):
     Z_k = np.eye(n_states * n_actions)
     
     for _ in range(max_iter):
+        # Start timing the iteration
+        start_time = time.time()
+        
         # Decision variables
         r = cp.Variable((T, n_states * n_actions), value=r_prev)
         nu = cp.Variable((T, n_states), value=nu_prev)
@@ -878,7 +881,12 @@ def solve_PROBLEM_3_RTH(gw, U, sigmas, pi, max_iter=10, delta=1e-4):
 
         # Solve the problem
         problem = cp.Problem(objective, constraints)
-        problem.solve(solver=cp.MOSEK, verbose=True)
+        problem.solve(solver=cp.MOSEK, verbose=False)
+        
+        # End timing the iteration
+        end_time = time.time()
+        iteration_time = end_time - start_time
+        print(f"Iteration {_} took {iteration_time:.4f} seconds.")
         
         # Update weights based on solution
         if problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
