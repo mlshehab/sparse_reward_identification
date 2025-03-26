@@ -123,6 +123,7 @@ def solve_greedy_backward_bisection_noisy(gw, pi, b):
 
         model.optimize()
         if model.Status == GRB.OPTIMAL:
+            print("Problem feasible.")
             for t in range(T):
                 for s in range(n_states):
                     for a in range(n_actions):
@@ -135,15 +136,17 @@ def solve_greedy_backward_bisection_noisy(gw, pi, b):
             if inf_i+1 == i and i>0:
                 switch_times += [i]
                 tau = i
+                print(f"New tau is {tau}")
                 inf_i = -1
 
         else:
-            print(f"Infeasibility found. New tau={tau}")
+            print(f"Infeasibility found.")
             if inf_i == i or sup_i == i + 1:
                 switch_times += [i+1]
                 tau = i+1
                 inf_i = -1
                 sup_i = i+1
+                print(f"New tau is {tau}")
             else:
                 inf_i = i
         i = (sup_i + inf_i)//2
