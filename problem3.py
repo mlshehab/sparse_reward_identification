@@ -223,7 +223,7 @@ if __name__ == "__main__":
     # print(np.round(pi[T-1,:,:],4))
     
     # r_recovered_RTH, nu_recovered_RTH  = solve_PROBLEM_3_RTH(gw, U, sigmas, pi,max_iter=5)
-    r_recovered_simple, nu_recovered_simple  = solve_PROBLEM_3(gw, U, sigmas, pi)
+    r_recovered_simple, nu_recovered_simple  = solve_PROBLEM_3(gw, U, sigmas, pi, true_reward_matrix)
     
 
     # r_recovered_reshaped =  np.zeros((gw.horizon, gw.n_states , gw.n_actions))

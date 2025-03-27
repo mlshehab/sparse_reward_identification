@@ -736,7 +736,7 @@ def solve_PROBLEM_2_cvxpy(gw, U, sigmas, pi):
 
     return alpha_values, (r_reshaped, nu.value, alpha_values)  # Placeholder for extract_solution
 
-def solve_PROBLEM_3(gw, U, sigmas, pi):
+def solve_PROBLEM_3(gw, U, sigmas, pi, true_reward_matrix):
     
 
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
@@ -761,7 +761,10 @@ def solve_PROBLEM_3(gw, U, sigmas, pi):
             idx = s + a * n_states
             constraints.append(r[T-1, idx] == cp.log(pi[T-1, s, a]) + nu[T-1, s])
             # constraints.append(r[T-1, idx] == U[idx, :] @ alpha[T-1, :])
-    
+    constraints.append(r[T-1] == true_reward_matrix[T-1])
+
+    # Add constraints for the true reward matrix
+
     # Objective: Minimize the nuclear norm of the reward matrix
     objective = cp.Minimize(cp.norm(r,"nuc"))
     
