@@ -38,9 +38,10 @@ if repo2_path not in sys.path:
 # from dynamic_irl.src.simulate_data_gridworld import generate_expert_trajectories
 # from dynamic_irl.src.simulate_data_gridworld import create_goal_maps
 # from dynamic_irl.src.dirl_for_gridworld import fit_dirl_gridworld
+GEN_DIR_NAME = 'data'
 
 from main import run_methods, plot_results
-from solvers import solve_PROBLEM_2, solve_PROBLEM_3, solve_PROBLEM_3_RNNM, solve_PROBLEM_3_RTH
+from solvers import solve_PROBLEM_2, solve_PROBLEM_3, solve_PROBLEM_3_RNNM, solve_PROBLEM_3_RTH, solve_PROBLEM_3_regularized
 from scipy.optimize import minimize
 
 def generate_weight_trajectories(sigmas, weights0, T):
@@ -84,13 +85,14 @@ def optimal_ratio(true, recovered):
     result = minimize(loss, 1.0)  # Initial guess is 1.0
     return result.x[0]  # Optimal ratio
 
-def plot_time_varying_weights(true_weights, rw_simple, T):
+def plot_time_varying_weights(true_weights, rw_simple, rw_ashwood, T):
     """
-    Plots the time-varying weights for the home state and water state, comparing true and recovered weights using the simple method.
+    Plots the time-varying weights for the home state and water state, comparing true and recovered weights using the simple method and Ashwood et al. method.
 
     Parameters:
     - true_weights: numpy array of shape (T, num_maps), the true time-varying weights
     - rw_simple: numpy array of shape (T, num_maps), the recovered time-varying weights using the simple method
+    - rw_ashwood: numpy array of shape (T, num_maps), the recovered time-varying weights using the Ashwood et al. method
     - T: int, number of time steps
     """
     # Enable LaTeX rendering
@@ -99,32 +101,47 @@ def plot_time_varying_weights(true_weights, rw_simple, T):
         "font.family": "serif",  # Use a serif font
         "font.serif": ["Computer Modern"],  # Default LaTeX font
     })
-    plt.figure(figsize=(12, 12))
+    plt.figure(figsize=(12, 18))
  
     # Standardize
     standardized_true_home = (true_weights[:, 0] - np.mean(true_weights[:, 0])) / np.std(true_weights[:, 0])
     standardized_simple_home = (rw_simple[:, 0] - np.mean(rw_simple[:, 0])) / np.std(rw_simple[:, 0])
+    standardized_ashwood_home = (rw_ashwood[:, 0] - np.mean(rw_ashwood[:, 0])) / np.std(rw_ashwood[:, 0])
     standardized_true_water = (true_weights[:, 1] - np.mean(true_weights[:, 1])) / np.std(true_weights[:, 1])
     standardized_simple_water = (rw_simple[:, 1] - np.mean(rw_simple[:, 1])) / np.std(rw_simple[:, 1])
+    standardized_ashwood_water = (rw_ashwood[:, 1] - np.mean(rw_ashwood[:, 1])) / np.std(rw_ashwood[:, 1])
+
+    # Calculate RMS errors
+    rms_error_simple_home = np.sqrt(np.mean((standardized_true_home - standardized_simple_home) ** 2))
+    rms_error_ashwood_home = np.sqrt(np.mean((standardized_true_home - standardized_ashwood_home) ** 2))
+    rms_error_simple_water = np.sqrt(np.mean((standardized_true_water - standardized_simple_water) ** 2))
+    rms_error_ashwood_water = np.sqrt(np.mean((standardized_true_water - standardized_ashwood_water) ** 2))
+
+    print(f"RMS Error for Home State (Simple Method): {rms_error_simple_home}")
+    print(f"RMS Error for Home State (Ashwood Method): {rms_error_ashwood_home}")
+    print(f"RMS Error for Water State (Simple Method): {rms_error_simple_water}")
+    print(f"RMS Error for Water State (Ashwood Method): {rms_error_ashwood_water}")
 
     # Plotting
     plt.subplot(2, 1, 1)
-    plt.plot(range(T), standardized_true_home, label=r'\textbf{True Reward at Home State (Standardized)}', linestyle='--', linewidth=2)
-    plt.plot(range(T), standardized_simple_home, label=r'\textbf{Recovered Reward at Home State (Standardized)}', linestyle='-.', linewidth=2)
+    plt.plot(range(T), standardized_true_home, label=r'\textbf{True Reward at Home State (Standardized)}', linestyle='-', linewidth=4)
+    plt.plot(range(T), standardized_simple_home, label=r'\textbf{Recovered Reward at Home State (Standardized)}', linestyle='-', linewidth=4)
+    plt.plot(range(T), standardized_ashwood_home, label=r'\textbf{dynamic\_irl (Ashwood et al., 2022) at Home State (Standardized)}', linestyle='-', linewidth=4)
     plt.xlabel(r'\textbf{Time}', fontsize=24)
     plt.ylabel(r'\textbf{Weight}', fontsize=24)
     plt.title(r'\textbf{Time-Varying Weight for Home State (Standardized)}', fontsize=28)
     plt.legend(fontsize=20)
-    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.grid(True, linestyle='-', alpha=0.7)
 
     plt.subplot(2, 1, 2)
-    plt.plot(range(T), standardized_true_water, label=r'\textbf{True Reward at Water State (Standardized)}', linestyle='--', linewidth=2)
-    plt.plot(range(T), standardized_simple_water, label=r'\textbf{Recovered Reward at Water State (Standardized)}', linestyle='-.', linewidth=2)
+    plt.plot(range(T), standardized_true_water, label=r'\textbf{True Reward at Water State (Standardized)}', linestyle='-', linewidth=4)
+    plt.plot(range(T), standardized_simple_water, label=r'\textbf{Recovered Reward at Water State (Standardized)}', linestyle='-', linewidth=4)
+    plt.plot(range(T), standardized_ashwood_water, label=r'\textbf{dynamic\_irl (Ashwood et al., 2022) at Water State (Standardized)}', linestyle='-', linewidth=4)
     plt.xlabel(r'\textbf{Time}', fontsize=24)
     plt.ylabel(r'\textbf{Weight}', fontsize=24)
     plt.title(r'\textbf{Time-Varying Weight for Water State (Standardized)}', fontsize=28)
     plt.legend(fontsize=20)
-    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.grid(True, linestyle='-', alpha=0.7)
 
     plt.tight_layout()
 
@@ -147,7 +164,7 @@ if __name__ == "__main__":
     grid_size = 5
     wind = 0.1
     # discount = 0.9
-    horizon = 50
+    horizon = 49
 
     start_state = 10
 
@@ -157,30 +174,31 @@ if __name__ == "__main__":
     N_experts = 200
     gridworld_H = 5
     gridworld_W = 5
-    T = 50
+    T = horizon
     GAMMA = 0.9
    
 
     # select number of maps
-    n_features = 2
+    n_features = 3
     
     # choose noise covariance for the random walk priors over weights corresponding to these maps
     sigmas = [2**-(3.5)]*n_features
 
-    print(sigmas)
+    # print(sigmas)
     weights0 = np.zeros(n_features) #initial weights at t=0
     weights0[1] = 1
 
-    # goal_maps = create_goal_maps(gridworld_H*gridworld_W, WATER_STATE, HOME_STATE)
-    #size is num_maps x num_states
-    #generate time-varying weights
-    time_varying_weights = generate_weight_trajectories(sigmas,
-                                                        weights0,
-                                                        T) #T x num_maps
-    # plot_time_varying_weights(time_varying_weights, horizon)
+
+    time_varying_weights  = pickle.load(open(GEN_DIR_NAME + 
+                                    "/output_data.pickle", 'rb'))['gen_time_varying_weights']   
+    
+    time_varying_weights = time_varying_weights.T
+
+    print("time_varying_weights", time_varying_weights.shape)
+
     gw = BasicGridWorld(grid_size, wind, GAMMA, horizon, 0)
 
-
+    # print("gw.horizon", gw.horizon)
     # construct U
     U = np.zeros(shape=(gw.n_states*gw.n_actions, n_features))
 
@@ -196,139 +214,232 @@ if __name__ == "__main__":
     U[WATER_STATE + 3*gw.n_states, 1] = 1.0
     U[WATER_STATE + 4*gw.n_states, 1] = 1.0
 
-    true_reward = np.zeros(shape=(gw.horizon, gw.n_states, gw.n_actions))
+    # Desired action
+    desired_action = 4 # stay
+    U[HOME_STATE + desired_action*gw.n_states, 2] = 1.0
+    U[WATER_STATE + desired_action*gw.n_states, 2] = 1.0
 
+    # Append a third column to time_varying_weights
+    third_column = np.zeros((time_varying_weights.shape[0], 1))
+    third_column[-1, 0] = 1
+    time_varying_weights = np.hstack((time_varying_weights, third_column))
+   
+
+    # Generate time-varying weights for all map
+
+    true_reward = np.zeros(shape=(gw.horizon, gw.n_states, gw.n_actions))
+    # print("true_reward", true_reward.shape, "time_varying_weights", time_varying_weights.shape)
     for t in range(gw.horizon):
         for s in range(gw.n_states):
              for a in range(gw.n_actions):
                     true_reward[t, s, a] = U[s + a * gw.n_states,0] * time_varying_weights[t,0] \
-                        + U[s + a * gw.n_states, 1] * time_varying_weights[t,1]
+                        + U[s + a * gw.n_states, 1] * time_varying_weights[t,1] \
+                        + U[s + a * gw.n_states, 2] * time_varying_weights[t,2]
     
-    true_reward_matrix = np.zeros((gw.horizon, gw.n_states * gw.n_actions))
+    # true_reward_matrix = np.zeros((gw.horizon, gw.n_states * gw.n_actions))
 
-    for t in range(gw.horizon):
-        for s in range(gw.n_states):
-            for a in range(gw.n_actions):
-                idx = s + a * gw.n_states
-                true_reward_matrix[t, idx] = (
-                    U[idx, 0] * time_varying_weights[t, 0] +
-                    U[idx, 1] * time_varying_weights[t, 1]
-                )
     # for t in range(gw.horizon):
-    #     print(f"At time step {t}:")
-    #     print(f"true reward: {true_reward[t, :, :]}")
-    
-    # print(true_reward)
-    V, Q, pi = soft_bellman_operation(gw, true_reward)
-    # print(np.round(pi[T-1,:,:],4))
-    
-    # r_recovered_RTH, nu_recovered_RTH  = solve_PROBLEM_3_RTH(gw, U, sigmas, pi,max_iter=5)
-    r_recovered_simple, nu_recovered_simple  = solve_PROBLEM_3(gw, U, sigmas, pi)
-    
-
-    # r_recovered_reshaped =  np.zeros((gw.horizon, gw.n_states , gw.n_actions))
-    # for t in range(gw.horizon-1):
     #     for s in range(gw.n_states):
     #         for a in range(gw.n_actions):
     #             idx = s + a * gw.n_states
-    #             r_recovered_reshaped[t+1, s, a] = r_recovered_simple[t,idx]
+    #             true_reward_matrix[t, idx] = (
+    #                 U[idx, 0] * time_varying_weights[t, 0] +
+    #                 U[idx, 1] * time_varying_weights[t, 1]
+    #             )
+    # # for t in range(gw.horizon):
+    # #     print(f"At time step {t}:")
+    # #     print(f"true reward: {true_reward[t, :, :]}")
     
-    # # Find the policy for r_recovered
-    # V_recovered, Q_recovered, pi_recovered = soft_bellman_operation(gw, r_recovered_reshaped)
+    # print(true_reward)
+    V, Q, pi = soft_bellman_operation(gw, true_reward)
 
-    # # Calculate the norm difference between the true policy and the recovered policy
-    # for t in range(gw.horizon):
-    #     norm_difference = np.linalg.norm(pi[t] - pi_recovered[t])
-    #     print(f"Norm difference between the true policy and the recovered policy at time step {t}: {norm_difference}")
-        # print(f"Norm difference between the true policy and the recovered policy at time step {t}: {norm_difference}")
+    # print(np.round(pi[T-1,:,:],4))
+    
+    # Solve the problem with simple method
+    # r_recovered_simple, nu_recovered_simple  = solve_PROBLEM_3(gw, U, sigmas, pi)
+    
+    # Solve the problem with RTH method
+    r_recovered, nu_recovered = solve_PROBLEM_3_RTH(gw, U, sigmas, pi, max_iter=5)
+    print("The reward at the last time step", r_recovered[T-1,:])
 
-    # Compute singular values for both r_recovered_RTH and r_recovered_simple
-    # singular_values_RTH = np.linalg.svd(r_recovered_RTH, compute_uv=False)
-    # rounded_singular_values_RTH = np.round(singular_values_RTH, 4)
+    # # Print the singular values of r_recovered_simple up to 3 decimal points
+    # singular_values = np.linalg.svd(r_recovered, compute_uv=False)
+    # print("Singular values of r_recovered_simple:", np.round(singular_values, 3))
 
+
+    # # Save the recovered reward matrix to a file
+    # with open('r_recovered.npy', 'wb') as foo:
+    #     np.save(foo, r_recovered)
+
+    # Save V, Q, pi, r_recovered, and nu_recovered to files
+    with open('V.npy', 'wb') as f:
+        np.save(f, V)
+    with open('Q.npy', 'wb') as f:
+        np.save(f, Q)
+    with open('pi.npy', 'wb') as f:
+        np.save(f, pi)
+    with open('r_recovered.npy', 'wb') as f:
+        np.save(f, r_recovered)
+    with open('nu_recovered.npy', 'wb') as f:
+        np.save(f, nu_recovered)
+
+    # # Load r_recovered from file
+    # with open('r_recovered.npy', 'rb') as f:
+    #     r_recovered = np.load(f)
+    
+    # rec_weights = pickle.load(open(GEN_DIR_NAME + 
+    #                                 "/output_data.pickle", 'rb'))['final_rec_weights']
  
-
-    def row_space_basis(matrix, top_k=2, tol=1e-10):
-        """
-        Compute a basis for the row space of `matrix`, keeping only the `top_k` largest singular values.
-
-        Args:
-            matrix (numpy.ndarray): The input matrix.
-            top_k (int): Number of singular vectors to retain.
-            tol (float): Tolerance for rank determination.
-
-        Returns:
-            numpy.ndarray: Basis for the row space.
-        """
-        U, S, Vt = np.linalg.svd(matrix, full_matrices=False)
-        rank = min(top_k, np.sum(S > tol))  # Keep at most `top_k` nonzero singular values
-        return Vt[:rank, :]  # The first `rank` rows of Vt form the row space basis
-
-    def get_coordinates_wrt_row_basis(matrix, basis):
-        """
-        Compute the coordinate representation of each row of `matrix` with respect to `basis`.
-
-        Args:
-            matrix (numpy.ndarray): The original matrix.
-            basis (numpy.ndarray): The row space basis.
-
-        Returns:
-            numpy.ndarray: The coordinate representation of each row.
-        """
-        return np.linalg.lstsq(basis.T, matrix.T, rcond=None)[0].T  # Solve for row coordinates
-
-    # Compute row space basis for both r_recovered_RTH and r_recovered_simple
-    # basis_RTH = row_space_basis(r_recovered_RTH)
-    basis_simple = row_space_basis(r_recovered_simple)
-
-    def change_of_basis_matrix(B, B_prime):
-        """
-        Compute the change of basis matrix P such that B P ≈ B'.
-        """
-        P = np.linalg.pinv(B) @ B_prime
-        return P
-
-    # Compute change of basis matrices for both RTH and simple
-    # P_RTH = change_of_basis_matrix(basis_RTH, U.T)
-    P_simple = change_of_basis_matrix(basis_simple, U.T)
-
-    # Compute coordinates with respect to the new basis for both RTH and simple
-    # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_RTH, np.dot(basis_RTH, P_RTH))
-    coordinates_simple = get_coordinates_wrt_row_basis(r_recovered_simple, np.dot(basis_simple, P_simple))
-    # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_simple, basis_simple)
-   
-    plot_time_varying_weights(time_varying_weights,  coordinates_simple, T)
-    # plot_time_varying_weights(time_varying_weights, coordinates_simple, T)
+    # print(rec_weights.shape)
+    # rec_weights_ashwood = rec_weights.T
 
 
+    # def row_space_basis(matrix, top_k=2, tol=1e-10):
+    #     """
+    #     Compute a basis for the row space of `matrix`, keeping only the `top_k` largest singular values.
 
-    projected_features = np.dot(basis_simple, P_simple)
+    #     Args:
+    #         matrix (numpy.ndarray): The input matrix.
+    #         top_k (int): Number of singular vectors to retain.
+    #         tol (float): Tolerance for rank determination.
 
-    # print(projected_features)
-    first_row = projected_features[0, :]
-    second_row = projected_features[1, :]
-    n_states = gw.n_states  # Assuming n_states is defined in the context
+    #     Returns:
+    #         numpy.ndarray: Basis for the row space.
+    #     """
+    #     U, S, Vt = np.linalg.svd(matrix, full_matrices=False)
+    #     rank = min(top_k, np.sum(S > tol))  # Keep at most `top_k` nonzero singular values
+    #     return Vt[:rank, :]  # The first `rank` rows of Vt form the row space basis
 
-    vectors_first_row = [first_row[i * n_states:(i + 1) * n_states] for i in range(5)]
-    vectors_second_row = [second_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    # def get_coordinates_wrt_row_basis(matrix, basis):
+    #     """
+    #     Compute the coordinate representation of each row of `matrix` with respect to `basis`.
 
-    fig, axes = plt.subplots(2, 5, figsize=(20, 8))
+    #     Args:
+    #         matrix (numpy.ndarray): The original matrix.
+    #         basis (numpy.ndarray): The row space basis.
 
-    for i, ax in enumerate(axes[0]):
-        sns.heatmap(vectors_first_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
-        ax.set_title(f'Action {i}')
-        ax.set_yticks(range(5))
-        ax.set_yticklabels(range(5))
-        ax.set_xticks([])
+    #     Returns:
+    #         numpy.ndarray: The coordinate representation of each row.
+    #     """
+    #     return np.linalg.lstsq(basis.T, matrix.T, rcond=None)[0].T  # Solve for row coordinates
 
-    for i, ax in enumerate(axes[1]):
-        sns.heatmap(vectors_second_row[i].reshape(5, 5).T, ax=ax, cbar=True, annot=True, fmt=".2f")
-        ax.set_title(f'Action {i}')
-        ax.set_yticks(range(5))
-        ax.set_yticklabels(range(5))
-        ax.set_xticks([])
+    # # Compute row space basis for both r_recovered_RTH and r_recovered_simple
+    # # basis_RTH = row_space_basis(r_recovered_RTH)
+    # basis_simple = row_space_basis(r_recovered, top_k=n_features)
 
-    plt.suptitle('Recovered Features')
-    plt.tight_layout()
+    # def change_of_basis_matrix(B, B_prime):
+    #     """
+    #     Compute the change of basis matrix P such that B P ≈ B'.
+    #     """
+    #     P = np.linalg.pinv(B) @ B_prime
+    #     return P
 
-    plt.savefig('results/problem3/features.png')
+    # # Compute change of basis matrices for both RTH and simple
+    # # P_RTH = change_of_basis_matrix(basis_RTH, U.T)
+    # P_simple = change_of_basis_matrix(basis_simple, U.T)
+
+    # # Compute coordinates with respect to the new basis for both RTH and simple
+    # # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_RTH, np.dot(basis_RTH, P_RTH))
+    # coordinates_simple = get_coordinates_wrt_row_basis(r_recovered, np.dot(basis_simple, P_simple))
+    # standardized_coordinates = (coordinates_simple.copy() - np.mean(coordinates_simple.copy(), axis=0)) / np.std(coordinates_simple.copy(), axis=0)
+    # for i, (orig_row, std_row) in enumerate(zip(coordinates_simple, standardized_coordinates)):
+    #     print(f"Original Row {i}: {orig_row}")
+    #     print(f"Standardized Row {i}: {std_row}")
+    # # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_simple, basis_simple)
+    
+
+    # print("coordinates_simple", coordinates_simple.shape, "rec_weights_ashwood", rec_weights_ashwood.shape, "time_varying_weights", time_varying_weights.shape)
+
+    # plot_time_varying_weights(time_varying_weights,  coordinates_simple[:,:-1],rec_weights_ashwood, T)
+    # # plot_time_varying_weights(time_varying_weights, coordinates_simple, T)
+
+
+
+    # projected_features = np.dot(basis_simple, P_simple)
+
+    # # print(projected_features)
+    # first_row = projected_features[0, :]
+    # second_row = projected_features[1, :]
+    # third_row = projected_features[2, :]
+    # n_states = gw.n_states  # Assuming n_states is defined in the context
+
+    # vectors_first_row = [first_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    # vectors_second_row = [second_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    # vectors_third_row = [third_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    
+    # # Plot the heatmaps
+    # fig, axes = plt.subplots(3, 5, figsize=(20, 12))
+
+    # for i, ax in enumerate(axes[0]):
+    #     sns.heatmap(vectors_first_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
+    #     ax.set_title(f'Action {i}')
+    #     ax.set_yticks(range(5))
+    #     ax.set_yticklabels(range(5))
+    #     ax.set_xticks([])
+
+    # for i, ax in enumerate(axes[1]):
+    #     sns.heatmap(vectors_second_row[i].reshape(5, 5).T, ax=ax, cbar=True, annot=True, fmt=".2f")
+    #     ax.set_title(f'Action {i}')
+    #     ax.set_yticks(range(5))
+    #     ax.set_yticklabels(range(5))
+    #     ax.set_xticks([])
+
+    # for i, ax in enumerate(axes[2]):
+    #     sns.heatmap(vectors_third_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
+    #     ax.set_title(f'Action {i}')
+    #     ax.set_yticks(range(5))
+    #     ax.set_yticklabels(range(5))
+    #     ax.set_xticks([])
+
+    # plt.suptitle('Recovered Features')
+    # plt.tight_layout()
+
+    # plt.savefig('results/problem3/features.png')
+
+
+
+
+    # final_rec_goal_maps = pickle.load(open(GEN_DIR_NAME + 
+    #                                 "/output_data.pickle", 'rb'))['final_rec_goal_maps']
+
+    # feature_maps_0 = final_rec_goal_maps[0]
+    # feature_maps_1 = final_rec_goal_maps[1]
+
+    # fig, axes = plt.subplots(1, 2, figsize=(20, 8))
+
+    # # Define grid dimensions
+    # grid_H, grid_W = 5, 5
+
+    # # Plot the heatmap on the left
+    # sns.heatmap(vectors_first_row[0].reshape(grid_H, grid_W), ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    # axes[0].set_yticks(range(grid_H))
+    # axes[0].set_yticklabels(range(grid_H), fontsize=16)
+    # axes[0].set_xticks([])
+
+    # # Plot the heatmap on the right using sns
+    # sns.heatmap(np.reshape(final_rec_goal_maps[0], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    # axes[1].set_yticks(range(grid_H))
+    # axes[1].set_yticklabels(range(grid_H), fontsize=16)
+    # axes[1].set_xticks([])
+
+    # plt.tight_layout()
+
+    # plt.savefig('results/problem3/comparison_home.png')
+
+    # fig, axes = plt.subplots(1, 2, figsize=(20, 8))
+
+    # # Plot the heatmap on the left
+    # sns.heatmap(vectors_second_row[0].reshape(grid_H, grid_W).T, ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    # axes[0].set_yticks(range(grid_H))
+    # axes[0].set_yticklabels(range(grid_H), fontsize=16)
+    # axes[0].set_xticks([])
+
+    # # Plot the heatmap on the right using sns
+    # sns.heatmap(np.reshape(final_rec_goal_maps[1], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    # axes[1].set_yticks(range(grid_H))
+    # axes[1].set_yticklabels(range(grid_H), fontsize=16)
+    # axes[1].set_xticks([])
+
+    # plt.tight_layout()
+
+    # plt.savefig('results/problem3/comparison_water.png')
