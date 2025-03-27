@@ -1,13 +1,14 @@
 import numpy as np
-from numba import njit, prange
+from numba import njit, prange, set_num_threads
 
-
+import os
 import time 
 
 import gurobipy as gp
 from gurobipy import GRB
 
-from noisy_solvers import solve_milp_noisy, solve_greedy_backward_bisection_noisy#, solve_greedy_backward_bisection_smaller, solve_greedy_backward_alpha
+from solvers import solve_greedy_backward_bisection
+from noisy_solvers import solve_milp_noisy, solve_greedy_backward_bisection_noisy, solve_greedy_backward_bisection_smaller_noisy#, solve_greedy_backward_alpha
 from dynamics import BasicGridWorld
 from utils.bellman import soft_bellman_operation
 
@@ -67,12 +68,36 @@ def estimate_pi_and_visits_numba(P, pi, H, NUM_TRAJECTORIES):
     return action_counts, visit_counts
 
 NUMBER_OF_EXPERIMENTS = 1
-NUM_TRAJECTORIES = 3_000_000
 # NUMBER_OF_FEATURES = 7
+
+def check_feasibility_reward(gw, pi, r, b):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+
+    model = gp.Model("MILP")
+    model.setParam('OutputFlag', False)
+    # Decision variables
+    nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
+
+    # Objective: Minimize sum of z_t
+    model.setObjective(0, GRB.MINIMIZE)
+
+    # Constraints
+    for t in range(T-1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                # model.addConstr(r[t, s, a] == np.log(pi[t, s, a]) + nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+                model.addConstr(nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)) <= r[t, s, a]-np.log(pi[t, s, a]) + b[t,s], name=f"r_def_{t}_{s}_{a}")
+                model.addConstr(nu[t,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1, j] for j in range(n_states)) >= r[t, s, a]-np.log(pi[t, s, a]) - b[t,s], name=f"r_def_{t}_{s}_{a}")
+    
+    # Solve the model
+    model.optimize()
+
+    # Return results
+    return model.status == GRB.OPTIMAL
 
 def check_feasibility(gw, pi, r, nu, b):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
-    epsilon = 1e-7
+    epsilon = 1e-6
     # Constraints
     for t in range(T-1):
         for s in range(n_states):
@@ -88,41 +113,35 @@ def check_feasibility(gw, pi, r, nu, b):
     # Add constraints for the last time step
     for s in range(n_states):
         for a in range(n_actions):
-            if not (r[T-1, s, a] <= np.log(pi[T-1, s, a]) + b[T-1, s] + nu[T-1, s]):
+            if not (r[T-1, s, a] - epsilon <= np.log(pi[T-1, s, a]) + b[T-1, s] + nu[T-1, s]):
                 return False
-            elif not (r[T-1, s, a] >= np.log(pi[T-1, s, a]) - b[T-1, s] + nu[T-1, s]):
+            elif not (r[T-1, s, a] + epsilon >= np.log(pi[T-1, s, a]) - b[T-1, s] + nu[T-1, s]):
                 return False
     print(f"Time {T-1} is feasible")
     return True     
 
-def run_problem_1():
+def run_problem_1(num_trajectories, seed):
     '''
     This function compares the solutions found by Greedy-Linear to MILP over some randomly generated MDPs
     '''
-    print(f"{NUM_TRAJECTORIES=}")
+    reward_path = f"data/rewards/reward_{seed}.npy"
+    print(f"{num_trajectories=}")
     grid_size = 5
     wind = 0.1
     discount = 0.9
-    horizon = 80
+    horizon = 50
     reward = 1
     np.random.seed(1)
-    for number_of_switches in [15]:
+    for number_of_switches in [8]:
         for _ in range(NUMBER_OF_EXPERIMENTS):
+
             gw = BasicGridWorld(grid_size, wind, discount, horizon, reward)
             # now obtain time-varying reward maps
-            rewards = np.zeros((gw.horizon, gw.n_states)) #array of size Txnum_states
-            rewards = rewards.T
-
-
-            reward_switch_times = sorted(np.random.choice(gw.horizon-3, number_of_switches, replace=False) + 1) ### Ensures the switches do not occur at the last and first steps
-            print("True reward switch times: ", reward_switch_times)
-            reward_switch_intervals = [0] + reward_switch_times + [gw.horizon]
-            reward_functions = [np.random.uniform(0,1,(gw.n_states,gw.n_actions)) for _ in range(number_of_switches + 1)]
-
-            reward = np.zeros(shape=(gw.horizon, gw.n_states, gw.n_actions))
-            for k in range(number_of_switches + 1):
-                for t in range(reward_switch_intervals[k], reward_switch_intervals[k+1]):
-                    reward[t,:,:] = reward_functions[k]
+            if os.path.exists(reward_path):
+                reward = np.load(f"data/rewards/reward_{seed}.npy")
+            else:
+                generate_and_save_rewards(seed)
+                reward = np.load(f"data/rewards/reward_{seed}.npy")
 
             V, Q, pi = soft_bellman_operation(gw, reward)
 
@@ -130,7 +149,7 @@ def run_problem_1():
 
             P = np.asarray(gw.P, dtype=np.float64)     # shape (A, S, S)
             pi = np.asarray(pi, dtype=np.float64)   # shape (H, S, A)
-            action_counts, visit_counts = estimate_pi_and_visits_numba(P, pi, gw.horizon, NUM_TRAJECTORIES)
+            action_counts, visit_counts = estimate_pi_and_visits_numba(P, pi, gw.horizon, num_trajectories)
 
             if (visit_counts == 0).any():
                 print("Still there are t,s pairs not visited")
@@ -168,37 +187,97 @@ def run_problem_1():
             violation_fraction = np.sum(np.abs(pi - pi_hat) > epsilon_broadcast) / (gw.horizon * gw.n_states * gw.n_actions)
 
             print("Violation fraction: ", violation_fraction)
-
-            # start_time = time.time()
-            # r_milp, nu_milp, z = solve_milp_noisy(gw, pi_hat, b)
-            # print(r_milp.shape, nu_milp.shape)
-            # print(f"MILP done in {time.time() - start_time:.2f} seconds")
-
-            # if check_feasibility(gw, pi_hat, r_milp, nu_milp, b):
-            #     print("MILP solution is feasible")
-            # else:
-            #     print("MILP solution is infeasible")
-
-
-            # print("MILP:", [index for index, value in enumerate(z) if value == 1])
+            print(f"{epsilons.max()=}, {epsilons.min()=}")
 
             start_time = time.time()
-            r_greedy, nu_greedy, switch_times  = solve_greedy_backward_bisection_noisy(gw, pi_hat, b)
+            if num_trajectories == 1:
+                r_greedy, nu_greedy, switch_times = solve_greedy_backward_bisection(gw, pi)
+            else:
+                r_greedy, nu_greedy, switch_times  = solve_greedy_backward_bisection_smaller_noisy(gw, pi_hat, b)
 
             print(f"Greedy-Linear done in {time.time() - start_time:.2f} seconds")
-
-
-            if check_feasibility(gw, pi_hat, r_greedy, nu_greedy, b):
-                print("Greedy solution is feasible")
-            else:
-                print("Greedy solution is infeasible")
-
-
-            print("Optimal switch times found:")
-            # print("MILP:", [index for index, value in enumerate(z) if value == 1])
+            # print("True switch times: ", )
             print("Greedy:", switch_times)
+
+            if num_trajectories == 1:
+                if check_feasibility(gw, pi, r_greedy, nu_greedy, np.zeros_like(b)):
+                    print("Greedy solution is feasible")
+                else:
+                    print("Solution is infeasible")
+            else:
+                if check_feasibility(gw, pi_hat, r_greedy, nu_greedy, b):
+                    print("Greedy solution is feasible")
+                else:
+                    print("Greedy solution is infeasible")
+                    print("Checking feasibility of rewards only")
+                    if check_feasibility_reward(gw, pi_hat, r_greedy, b):
+                        print("Greedy solution is REWARD feasible")
+                    else:
+                        print("Greedy solution is not even REWARD feasible")
+
+
+
+            np.save(f"results/problem1/{seed=}, {num_trajectories=}_switches.npy", np.array(switch_times))
+            np.save(f"results/problem1/{seed=}, {num_trajectories=}_rewards.npy", np.array(r_greedy))
+            np.save(f"results/problem1/{seed=}, {num_trajectories=}_values.npy", np.array(nu_greedy))
+
+
+def generate_and_save_rewards(seed):
+        grid_size = 5
+        wind = 0.1
+        discount = 0.9
+        horizon = 50
+        reward = 1
+        number_of_switches = 8
+        np.random.seed(seed)
+        gw = BasicGridWorld(grid_size, wind, discount, horizon, reward)
+        # now obtain time-varying reward maps
+
+        reward_switch_times = sorted(np.random.choice(gw.horizon-3, number_of_switches, replace=False) + 1) ### Ensures the switches do not occur at the last and first steps
+        print("True reward switch times: ", reward_switch_times)
+        reward_switch_intervals = [0] + reward_switch_times + [gw.horizon]
+        reward_functions = [np.random.uniform(0,1,(gw.n_states,gw.n_actions))]
+        magnitude_by_switch = 1./number_of_switches
+        for i in range(number_of_switches):
+            reward_functions += [reward_functions[i] + np.random.uniform(0,i*magnitude_by_switch,(gw.n_states,gw.n_actions))]
+
+        reward = np.zeros(shape=(gw.horizon, gw.n_states, gw.n_actions))
+        for k in range(number_of_switches + 1):
+            for t in range(reward_switch_intervals[k], reward_switch_intervals[k+1]):
+                reward[t,:,:] = reward_functions[k]
+
+        np.save(f"data/rewards/reward_{seed}.npy", reward)
+        np.save(f"data/rewards/switch_{seed}.npy", np.array(reward_switch_times))
+            
 
 
 if __name__ == "__main__":
-    run_problem_1()
-    exit()
+
+    from multiprocessing import Process
+    from itertools import product
+
+    # Define your input lists
+    seed_list = [1, 2, 3]
+    # num_traj_list = [1_000_000, 2_000_000, 4_000_000, 8_000_000]
+    # num_traj_list = [12_000_000, 16_000_000, 24_000_000]#, 8_000_000]
+    num_traj_list = [120_000_000, 240_000_000]#[36_000_000, 48_000_000, 60_000_000]#, 8_000_000]
+
+    for seed in seed_list:
+        generate_and_save_rewards(seed)
+
+    # Create Cartesian product of parameters
+    arg_list = list(product(num_traj_list, seed_list))
+
+    # Launch each in its own process
+    set_num_threads(60//len(arg_list))
+    processes = []
+    for x, y in arg_list:
+        p = Process(target=run_problem_1, args=(x, y))
+        p.daemon = True
+        p.start()
+        processes.append(p)
+    
+    for p in processes:
+        p.join()
+
+    # run_problem_1(2_000_000, 2)
