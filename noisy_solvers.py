@@ -309,8 +309,8 @@ def solve_greedy_backward_bisection_smaller_noisy(gw, pi, b):
         for t in range(i,tau):
             for s in range(n_states):
                 for a in range(n_actions):
-                    model.addConstr(r[s, a] <= np.log(pi[t, s, a]) + b[t,s] + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
-                    model.addConstr(r[s, a] >= np.log(pi[t, s, a]) - b[t,s] + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+                    model.addConstr(r[s, a] <= np.log(pi[t, s, a]) + b[t,s,a] + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+                    model.addConstr(r[s, a] >= np.log(pi[t, s, a]) - b[t,s,a] + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
 
  
         for s in range(n_states):
@@ -348,3 +348,46 @@ def solve_greedy_backward_bisection_smaller_noisy(gw, pi, b):
 
     print(f"It took {n_iterations} iteration to solve")
     return r_values, nu_values, switch_times[::-1]
+
+def solve_PROBLEM_3_noisy(gw, U, sigmas, pi, b):
+    
+
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    n_features = U.shape[1]
+
+    # Decision variables
+    r = cp.Variable((T, n_states * n_actions))  # Flattened reward matrix
+    nu = cp.Variable((T, n_states))
+    # alpha = cp.Variable((T, n_features))
+    
+    # Constraints
+    constraints = []
+    for t in range(T-1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                idx = s + a * n_states
+                constraints.append(r[t, idx] <= cp.log(pi[t, s, a]) + b[t,s,a] + nu[t, s] - gamma * (P[a][s, :] @ nu[t+1, :]))
+                constraints.append(r[t, idx] >= cp.log(pi[t, s, a]) - b[t,s,a] + nu[t, s] - gamma * (P[a][s, :] @ nu[t+1, :]))
+
+                # constraints.append(r[t, idx] == U[idx, :] @ alpha[t, :])
+    
+    for s in range(n_states):
+        for a in range(n_actions):
+            idx = s + a * n_states
+            constraints.append(r[T-1, idx] <= cp.log(pi[T-1, s, a]) + b[t,s,a] + nu[T-1, s])
+            constraints.append(r[T-1, idx] >= cp.log(pi[T-1, s, a]) - b[t,s,a] + nu[T-1, s])
+
+    # constraints.append(r[T-1] == true_reward_matrix[T-1])
+
+    # Add constraints for the true reward matrix
+
+    # Objective: Minimize the nuclear norm of the reward matrix
+    objective = cp.Minimize(cp.norm(r,"nuc"))
+    
+    # Solve the problem
+    problem = cp.Problem(objective, constraints)
+    problem.solve(solver=cp.MOSEK, verbose=True)
+    
+    print("Status:", problem.status)
+    
+    return r.value, nu.value
