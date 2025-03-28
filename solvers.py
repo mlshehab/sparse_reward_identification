@@ -6,6 +6,7 @@ from scipy.linalg import sqrtm
 from scipy.linalg import fractional_matrix_power
 import scipy.linalg
 import time
+
 def solve_milp(gw, pi):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
     # Create Gurobi model
@@ -736,7 +737,7 @@ def solve_PROBLEM_2_cvxpy(gw, U, sigmas, pi):
 
     return alpha_values, (r_reshaped, nu.value, alpha_values)  # Placeholder for extract_solution
 
-def solve_PROBLEM_3(gw, U, sigmas, pi, true_reward_matrix):
+def solve_PROBLEM_3(gw, U, sigmas, pi):
     
 
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
@@ -760,8 +761,8 @@ def solve_PROBLEM_3(gw, U, sigmas, pi, true_reward_matrix):
         for a in range(n_actions):
             idx = s + a * n_states
             constraints.append(r[T-1, idx] == cp.log(pi[T-1, s, a]) + nu[T-1, s])
-            # constraints.append(r[T-1, idx] == U[idx, :] @ alpha[T-1, :])
-    constraints.append(r[T-1] == true_reward_matrix[T-1])
+            
+    # constraints.append(r[T-1] == true_reward_matrix[T-1])
 
     # Add constraints for the true reward matrix
 
@@ -867,8 +868,6 @@ def solve_PROBLEM_3_RNNM(gw, U, sigmas, pi, max_iter=10, delta= 1e-4):
     
     print("Final Status:", problem.status)
     return r.value, nu.value
-
-
 
 def solve_PROBLEM_3_RTH(gw, U, sigmas, pi, max_iter=10, delta=1e-4):
     T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P

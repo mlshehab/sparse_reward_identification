@@ -253,45 +253,20 @@ if __name__ == "__main__":
     # print(true_reward)
     V, Q, pi = soft_bellman_operation(gw, true_reward)
 
-    # print(np.round(pi[T-1,:,:],4))
-    
-    # Solve the problem with simple method
-    # r_recovered_simple, nu_recovered_simple  = solve_PROBLEM_3(gw, U, sigmas, pi)
-    
+ 
     # Solve the problem with RTH method
-    r_recovered, nu_recovered = solve_PROBLEM_3(gw, U, sigmas, pi, true_reward_matrix)
-    print("The reward at the last time step", r_recovered[T-1,:] - true_reward_matrix[T-1,:])
+    r_recovered, nu_recovered = solve_PROBLEM_3(gw, U, sigmas, pi)
+    
 
-    # # Print the singular values of r_recovered_simple up to 3 decimal points
-    # singular_values = np.linalg.svd(r_recovered, compute_uv=False)
-    # print("Singular values of r_recovered_simple:", np.round(singular_values, 3))
+   
+  
 
-
-    # # Save the recovered reward matrix to a file
-    # with open('r_recovered.npy', 'wb') as foo:
-    #     np.save(foo, r_recovered)
-
-    # Save V, Q, pi, r_recovered, and nu_recovered to files
-    # with open('V.npy', 'wb') as f:
-    #     np.save(f, V)
-    # with open('Q.npy', 'wb') as f:
-    #     np.save(f, Q)
-    # with open('pi.npy', 'wb') as f:
-    #     np.save(f, pi)
-    # with open('r_recovered.npy', 'wb') as f:
-    #     np.save(f, r_recovered)
-    # with open('nu_recovered.npy', 'wb') as f:
-    #     np.save(f, nu_recovered)
-
-    # # Load r_recovered from file
-    # with open('r_recovered.npy', 'rb') as f:
-    #     r_recovered = np.load(f)
     
     rec_weights = pickle.load(open(GEN_DIR_NAME + 
                                     "/output_data.pickle", 'rb'))['final_rec_weights']
  
-    print(rec_weights.shape)
-    rec_weights_ashwood = rec_weights.T
+    # print(rec_weights.shape)
+    rw_ashwood = rec_weights.T
 
 
     def row_space_basis(matrix, top_k=2, tol=1e-10):
@@ -334,112 +309,102 @@ if __name__ == "__main__":
         P = np.linalg.pinv(B) @ B_prime
         return P
 
-    # Compute change of basis matrices for both RTH and simple
-    # P_RTH = change_of_basis_matrix(basis_RTH, U.T)
+  
     P_simple = change_of_basis_matrix(basis_simple, U.T)
 
     # Compute coordinates with respect to the new basis for both RTH and simple
-    # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_RTH, np.dot(basis_RTH, P_RTH))
-    coordinates_simple = get_coordinates_wrt_row_basis(r_recovered, np.dot(basis_simple, P_simple))
-    standardized_coordinates = (coordinates_simple.copy() - np.mean(coordinates_simple.copy(), axis=0)) / np.std(coordinates_simple.copy(), axis=0)
-    for i, (orig_row, std_row) in enumerate(zip(coordinates_simple, standardized_coordinates)):
-        print(f"Original Row {i}: {orig_row}")
-        print(f"Standardized Row {i}: {std_row}")
-    # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_simple, basis_simple)
     
+    rw_simple = get_coordinates_wrt_row_basis(r_recovered, np.dot(basis_simple, P_simple))
+  
+   
+    plot_time_varying_weights(time_varying_weights,  rw_simple, rw_ashwood, T)
+ 
 
-    print("coordinates_simple", coordinates_simple.shape, "rec_weights_ashwood", rec_weights_ashwood.shape, "time_varying_weights", time_varying_weights.shape)
+    # projected_features = np.dot(basis_simple, P_simple)
 
-    plot_time_varying_weights(time_varying_weights,  coordinates_simple,rec_weights_ashwood, T)
-    # plot_time_varying_weights(time_varying_weights, coordinates_simple, T)
+    # # print(projected_features)
+    # first_row = projected_features[0, :]
+    # second_row = projected_features[1, :]
+    # third_row = projected_features[2, :]
+    # n_states = gw.n_states  # Assuming n_states is defined in the context
 
-
-
-    projected_features = np.dot(basis_simple, P_simple)
-
-    # print(projected_features)
-    first_row = projected_features[0, :]
-    second_row = projected_features[1, :]
-    third_row = projected_features[2, :]
-    n_states = gw.n_states  # Assuming n_states is defined in the context
-
-    vectors_first_row = [first_row[i * n_states:(i + 1) * n_states] for i in range(5)]
-    vectors_second_row = [second_row[i * n_states:(i + 1) * n_states] for i in range(5)]
-    vectors_third_row = [third_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    # vectors_first_row = [first_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    # vectors_second_row = [second_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    # vectors_third_row = [third_row[i * n_states:(i + 1) * n_states] for i in range(5)]
     
-    # Plot the heatmaps
-    fig, axes = plt.subplots(3, 5, figsize=(20, 12))
+    # # Plot the heatmaps
+    # fig, axes = plt.subplots(3, 5, figsize=(20, 12))
 
-    for i, ax in enumerate(axes[0]):
-        sns.heatmap(vectors_first_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
-        ax.set_title(f'Action {i}')
-        ax.set_yticks(range(5))
-        ax.set_yticklabels(range(5))
-        ax.set_xticks([])
+    # for i, ax in enumerate(axes[0]):
+    #     sns.heatmap(vectors_first_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
+    #     ax.set_title(f'Action {i}')
+    #     ax.set_yticks(range(5))
+    #     ax.set_yticklabels(range(5))
+    #     ax.set_xticks([])
 
-    for i, ax in enumerate(axes[1]):
-        sns.heatmap(vectors_second_row[i].reshape(5, 5).T, ax=ax, cbar=True, annot=True, fmt=".2f")
-        ax.set_title(f'Action {i}')
-        ax.set_yticks(range(5))
-        ax.set_yticklabels(range(5))
-        ax.set_xticks([])
+    # for i, ax in enumerate(axes[1]):
+    #     sns.heatmap(vectors_second_row[i].reshape(5, 5).T, ax=ax, cbar=True, annot=True, fmt=".2f")
+    #     ax.set_title(f'Action {i}')
+    #     ax.set_yticks(range(5))
+    #     ax.set_yticklabels(range(5))
+    #     ax.set_xticks([])
 
-    for i, ax in enumerate(axes[2]):
-        sns.heatmap(vectors_third_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
-        ax.set_title(f'Action {i}')
-        ax.set_yticks(range(5))
-        ax.set_yticklabels(range(5))
-        ax.set_xticks([])
+    # for i, ax in enumerate(axes[2]):
+    #     sns.heatmap(vectors_third_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
+    #     ax.set_title(f'Action {i}')
+    #     ax.set_yticks(range(5))
+    #     ax.set_yticklabels(range(5))
+    #     ax.set_xticks([])
 
-    plt.suptitle('Recovered Features')
-    plt.tight_layout()
+    # plt.suptitle('Recovered Features')
+    # plt.tight_layout()
 
-    plt.savefig('results/problem3/features.png')
-
-
+    # plt.savefig('results/problem3/features.png')
 
 
-    final_rec_goal_maps = pickle.load(open(GEN_DIR_NAME + 
-                                    "/output_data.pickle", 'rb'))['final_rec_goal_maps']
 
-    feature_maps_0 = final_rec_goal_maps[0]
-    feature_maps_1 = final_rec_goal_maps[1]
 
-    fig, axes = plt.subplots(1, 2, figsize=(20, 8))
+    # final_rec_goal_maps = pickle.load(open(GEN_DIR_NAME + 
+    #                                 "/output_data.pickle", 'rb'))['final_rec_goal_maps']
 
-    # Define grid dimensions
-    grid_H, grid_W = 5, 5
+    # feature_maps_0 = final_rec_goal_maps[0]
+    # feature_maps_1 = final_rec_goal_maps[1]
 
-    # Plot the heatmap on the left
-    sns.heatmap(vectors_first_row[0].reshape(grid_H, grid_W), ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
-    axes[0].set_yticks(range(grid_H))
-    axes[0].set_yticklabels(range(grid_H), fontsize=16)
-    axes[0].set_xticks([])
+    # fig, axes = plt.subplots(1, 2, figsize=(20, 8))
 
-    # Plot the heatmap on the right using sns
-    sns.heatmap(np.reshape(final_rec_goal_maps[0], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
-    axes[1].set_yticks(range(grid_H))
-    axes[1].set_yticklabels(range(grid_H), fontsize=16)
-    axes[1].set_xticks([])
+    # # Define grid dimensions
+    # grid_H, grid_W = 5, 5
 
-    plt.tight_layout()
+    # # Plot the heatmap on the left
+    # sns.heatmap(vectors_first_row[0].reshape(grid_H, grid_W), ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    # axes[0].set_yticks(range(grid_H))
+    # axes[0].set_yticklabels(range(grid_H), fontsize=16)
+    # axes[0].set_xticks([])
 
-    plt.savefig('results/problem3/comparison_home.png')
+    # # Plot the heatmap on the right using sns
+    # sns.heatmap(np.reshape(final_rec_goal_maps[0], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    # axes[1].set_yticks(range(grid_H))
+    # axes[1].set_yticklabels(range(grid_H), fontsize=16)
+    # axes[1].set_xticks([])
 
-    fig, axes = plt.subplots(1, 2, figsize=(20, 8))
+    # plt.tight_layout()
 
-    # Plot the heatmap on the left
-    sns.heatmap(vectors_second_row[0].reshape(grid_H, grid_W).T, ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
-    axes[0].set_yticks(range(grid_H))
-    axes[0].set_yticklabels(range(grid_H), fontsize=16)
-    axes[0].set_xticks([])
+    # plt.savefig('results/problem3/comparison_home.png')
 
-    # Plot the heatmap on the right using sns
-    sns.heatmap(np.reshape(final_rec_goal_maps[1], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
-    axes[1].set_yticks(range(grid_H))
-    axes[1].set_yticklabels(range(grid_H), fontsize=16)
-    axes[1].set_xticks([])
+    # fig, axes = plt.subplots(1, 2, figsize=(20, 8))
 
-    plt.tight_layout()
+    # # Plot the heatmap on the left
+    # sns.heatmap(vectors_second_row[0].reshape(grid_H, grid_W).T, ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    # axes[0].set_yticks(range(grid_H))
+    # axes[0].set_yticklabels(range(grid_H), fontsize=16)
+    # axes[0].set_xticks([])
 
-    plt.savefig('results/problem3/comparison_water.png')
+    # # Plot the heatmap on the right using sns
+    # sns.heatmap(np.reshape(final_rec_goal_maps[1], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    # axes[1].set_yticks(range(grid_H))
+    # axes[1].set_yticklabels(range(grid_H), fontsize=16)
+    # axes[1].set_xticks([])
+
+    # plt.tight_layout()
+
+    # plt.savefig('results/problem3/comparison_water.png')
