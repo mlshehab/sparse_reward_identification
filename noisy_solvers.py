@@ -88,8 +88,8 @@ def solve_greedy_backward_bisection_noisy(gw, pi, b):
         print(f"Testing from {i} to {T-1}. {tau=}. {inf_i=}, {sup_i=}")
         ## Is feasible?
         model = gp.Model("Feasible")
+        model.setParam('OutputFlag', 0)
         model.setParam("NumericFocus", 1)
-        model.setParam('OutputFlag', False)
         model.setObjective(0, GRB.MINIMIZE)
         r = model.addVars(T, n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
         nu = model.addVars(T, n_states, vtype=GRB.CONTINUOUS, name="nu")
@@ -120,9 +120,9 @@ def solve_greedy_backward_bisection_noisy(gw, pi, b):
                     model.addConstr(r[t,s, a] == r_values[t,s,a], name=f"r_def_{t}_{s}_{a}")               
             model.addConstr(nu[t,s] == nu_values[t,s], name=f"nu_def_{t}_{s}_{a}")               
 
-
         model.optimize()
         if model.Status == GRB.OPTIMAL:
+            print("Problem feasible.")
             for t in range(T):
                 for s in range(n_states):
                     for a in range(n_actions):
@@ -130,25 +130,26 @@ def solve_greedy_backward_bisection_noisy(gw, pi, b):
                 for j in range(n_states):
                     nu_values[t, j] = nu[t, j].x
             
-
             sup_i = i
             if inf_i+1 == i and i>0:
                 switch_times += [i]
                 tau = i
+                print(f"New tau is {tau}")
                 inf_i = -1
 
         else:
-            print(f"Infeasibility found. New tau={tau}")
+            print(f"Infeasibility found.")
             if inf_i == i or sup_i == i + 1:
                 switch_times += [i+1]
                 tau = i+1
                 inf_i = -1
                 sup_i = i+1
+                print(f"New tau is {tau}")
             else:
                 inf_i = i
         i = (sup_i + inf_i)//2
 
-    print(f"It took {n_iterations} iteration to solve")
+    # print(f"It took {n_iterations} iteration to solve")
     return r_values, nu_values, switch_times[::-1]
 
 def solve_PROBLEM_2_noisy(gw, U, sigmas, pi, b):
@@ -277,3 +278,73 @@ def extract_solution(model, r, nu, alpha, T, n_states, n_actions, n_features):
         
         return None, None, None
 
+
+
+def solve_greedy_backward_bisection_smaller_noisy(gw, pi, b):
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+
+    tau = T
+    switch_times = []
+
+    i = T//2
+    inf_i = -1
+    sup_i = T
+
+    r_values = np.zeros((T, n_states, n_actions))
+    nu_values = np.zeros((T+1, n_states))
+
+    n_iterations = 0
+    while i >= 0:
+        n_iterations += 1
+        print(f"Testing from {i} to {T-1}. {tau=}. {inf_i=}, {sup_i=}")
+        ## Is feasible?
+        model = gp.Model("Feasible")
+        model.setParam('OutputFlag', False)
+        model.setParam("NumericFocus", 1)
+        model.setObjective(0, GRB.MINIMIZE)
+        r = model.addVars(n_states, n_actions, vtype=GRB.CONTINUOUS, name="r")
+        nu = model.addVars(tau-i + 1, n_states, vtype=GRB.CONTINUOUS, name="nu")
+
+        ### Reward constraints
+        for t in range(i,tau):
+            for s in range(n_states):
+                for a in range(n_actions):
+                    model.addConstr(r[s, a] <= np.log(pi[t, s, a]) + b[t,s] + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+                    model.addConstr(r[s, a] >= np.log(pi[t, s, a]) - b[t,s] + nu[t-i,s] - gamma * gp.quicksum(P[a][s, j] * nu[t+1-i, j] for j in range(n_states)), name=f"r_def_{t}_{s}_{a}")
+
+ 
+        for s in range(n_states):
+            model.addConstr(nu[tau-i, s] == nu_values[tau,s], name=f"r_def_{t}_{s}_{a}")        
+
+
+        model.optimize()
+        if model.Status == GRB.OPTIMAL:
+            for t in range(i, tau):
+                for s in range(n_states):
+                    for a in range(n_actions):
+                        r_values[t, s, a] = r[s, a].x
+                for j in range(n_states):
+                    nu_values[t, j] = nu[t-i, j].x
+            
+                # for j in range(n_states):
+                #     nu_values[tau, j] = nu[tau-i, j].x           
+
+            sup_i = i
+            # if inf_i+1 == i and i>0:
+            #     switch_times += [i]
+            #     tau = i
+            #     inf_i = -1
+
+        else:
+            print(f"Infeasibility found. New tau={tau}")
+            if inf_i == i or sup_i == i + 1:
+                switch_times += [i+1]
+                tau = i+1
+                inf_i = -1
+                sup_i = i+1
+            else:
+                inf_i = i
+        i = (sup_i + inf_i)//2
+
+    print(f"It took {n_iterations} iteration to solve")
+    return r_values, nu_values, switch_times[::-1]
