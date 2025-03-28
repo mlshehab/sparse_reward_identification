@@ -2,3 +2,4 @@
 *.ilp
 *.png
 *.DS_Store 
+*.npy
