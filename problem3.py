@@ -179,7 +179,7 @@ if __name__ == "__main__":
    
 
     # select number of maps
-    n_features = 3
+    n_features = 2
     
     # choose noise covariance for the random walk priors over weights corresponding to these maps
     sigmas = [2**-(3.5)]*n_features
@@ -215,14 +215,14 @@ if __name__ == "__main__":
     U[WATER_STATE + 4*gw.n_states, 1] = 1.0
 
     # Desired action
-    desired_action = 4 # stay
-    U[HOME_STATE + desired_action*gw.n_states, 2] = 1.0
-    U[WATER_STATE + desired_action*gw.n_states, 2] = 1.0
+    # desired_action = 4 # stay
+    # U[HOME_STATE + desired_action*gw.n_states, 2] = 1.0
+    # U[WATER_STATE + desired_action*gw.n_states, 2] = 1.0
 
     # Append a third column to time_varying_weights
-    third_column = np.zeros((time_varying_weights.shape[0], 1))
-    third_column[-1, 0] = 1
-    time_varying_weights = np.hstack((time_varying_weights, third_column))
+    # third_column = np.zeros((time_varying_weights.shape[0], 1))
+    # third_column[-1, 0] = 1
+    # time_varying_weights = np.hstack((time_varying_weights, third_column))
    
 
     # Generate time-varying weights for all map
@@ -233,19 +233,19 @@ if __name__ == "__main__":
         for s in range(gw.n_states):
              for a in range(gw.n_actions):
                     true_reward[t, s, a] = U[s + a * gw.n_states,0] * time_varying_weights[t,0] \
-                        + U[s + a * gw.n_states, 1] * time_varying_weights[t,1] \
-                        + U[s + a * gw.n_states, 2] * time_varying_weights[t,2]
+                        + U[s + a * gw.n_states, 1] * time_varying_weights[t,1] 
+                        # + U[s + a * gw.n_states, 2] * time_varying_weights[t,2]
     
-    # true_reward_matrix = np.zeros((gw.horizon, gw.n_states * gw.n_actions))
+    true_reward_matrix = np.zeros((gw.horizon, gw.n_states * gw.n_actions))
 
-    # for t in range(gw.horizon):
-    #     for s in range(gw.n_states):
-    #         for a in range(gw.n_actions):
-    #             idx = s + a * gw.n_states
-    #             true_reward_matrix[t, idx] = (
-    #                 U[idx, 0] * time_varying_weights[t, 0] +
-    #                 U[idx, 1] * time_varying_weights[t, 1]
-    #             )
+    for t in range(gw.horizon):
+        for s in range(gw.n_states):
+            for a in range(gw.n_actions):
+                idx = s + a * gw.n_states
+                true_reward_matrix[t, idx] = (
+                    U[idx, 0] * time_varying_weights[t, 0] +
+                    U[idx, 1] * time_varying_weights[t, 1]
+                )
     # # for t in range(gw.horizon):
     # #     print(f"At time step {t}:")
     # #     print(f"true reward: {true_reward[t, :, :]}")
@@ -259,8 +259,8 @@ if __name__ == "__main__":
     # r_recovered_simple, nu_recovered_simple  = solve_PROBLEM_3(gw, U, sigmas, pi)
     
     # Solve the problem with RTH method
-    r_recovered, nu_recovered = solve_PROBLEM_3_RTH(gw, U, sigmas, pi, max_iter=5)
-    print("The reward at the last time step", r_recovered[T-1,:])
+    r_recovered, nu_recovered = solve_PROBLEM_3(gw, U, sigmas, pi, true_reward_matrix)
+    print("The reward at the last time step", r_recovered[T-1,:] - true_reward_matrix[T-1,:])
 
     # # Print the singular values of r_recovered_simple up to 3 decimal points
     # singular_values = np.linalg.svd(r_recovered, compute_uv=False)
@@ -272,174 +272,174 @@ if __name__ == "__main__":
     #     np.save(foo, r_recovered)
 
     # Save V, Q, pi, r_recovered, and nu_recovered to files
-    with open('V.npy', 'wb') as f:
-        np.save(f, V)
-    with open('Q.npy', 'wb') as f:
-        np.save(f, Q)
-    with open('pi.npy', 'wb') as f:
-        np.save(f, pi)
-    with open('r_recovered.npy', 'wb') as f:
-        np.save(f, r_recovered)
-    with open('nu_recovered.npy', 'wb') as f:
-        np.save(f, nu_recovered)
+    # with open('V.npy', 'wb') as f:
+    #     np.save(f, V)
+    # with open('Q.npy', 'wb') as f:
+    #     np.save(f, Q)
+    # with open('pi.npy', 'wb') as f:
+    #     np.save(f, pi)
+    # with open('r_recovered.npy', 'wb') as f:
+    #     np.save(f, r_recovered)
+    # with open('nu_recovered.npy', 'wb') as f:
+    #     np.save(f, nu_recovered)
 
     # # Load r_recovered from file
     # with open('r_recovered.npy', 'rb') as f:
     #     r_recovered = np.load(f)
     
-    # rec_weights = pickle.load(open(GEN_DIR_NAME + 
-    #                                 "/output_data.pickle", 'rb'))['final_rec_weights']
+    rec_weights = pickle.load(open(GEN_DIR_NAME + 
+                                    "/output_data.pickle", 'rb'))['final_rec_weights']
  
-    # print(rec_weights.shape)
-    # rec_weights_ashwood = rec_weights.T
+    print(rec_weights.shape)
+    rec_weights_ashwood = rec_weights.T
 
 
-    # def row_space_basis(matrix, top_k=2, tol=1e-10):
-    #     """
-    #     Compute a basis for the row space of `matrix`, keeping only the `top_k` largest singular values.
+    def row_space_basis(matrix, top_k=2, tol=1e-10):
+        """
+        Compute a basis for the row space of `matrix`, keeping only the `top_k` largest singular values.
 
-    #     Args:
-    #         matrix (numpy.ndarray): The input matrix.
-    #         top_k (int): Number of singular vectors to retain.
-    #         tol (float): Tolerance for rank determination.
+        Args:
+            matrix (numpy.ndarray): The input matrix.
+            top_k (int): Number of singular vectors to retain.
+            tol (float): Tolerance for rank determination.
 
-    #     Returns:
-    #         numpy.ndarray: Basis for the row space.
-    #     """
-    #     U, S, Vt = np.linalg.svd(matrix, full_matrices=False)
-    #     rank = min(top_k, np.sum(S > tol))  # Keep at most `top_k` nonzero singular values
-    #     return Vt[:rank, :]  # The first `rank` rows of Vt form the row space basis
+        Returns:
+            numpy.ndarray: Basis for the row space.
+        """
+        U, S, Vt = np.linalg.svd(matrix, full_matrices=False)
+        rank = min(top_k, np.sum(S > tol))  # Keep at most `top_k` nonzero singular values
+        return Vt[:rank, :]  # The first `rank` rows of Vt form the row space basis
 
-    # def get_coordinates_wrt_row_basis(matrix, basis):
-    #     """
-    #     Compute the coordinate representation of each row of `matrix` with respect to `basis`.
+    def get_coordinates_wrt_row_basis(matrix, basis):
+        """
+        Compute the coordinate representation of each row of `matrix` with respect to `basis`.
 
-    #     Args:
-    #         matrix (numpy.ndarray): The original matrix.
-    #         basis (numpy.ndarray): The row space basis.
+        Args:
+            matrix (numpy.ndarray): The original matrix.
+            basis (numpy.ndarray): The row space basis.
 
-    #     Returns:
-    #         numpy.ndarray: The coordinate representation of each row.
-    #     """
-    #     return np.linalg.lstsq(basis.T, matrix.T, rcond=None)[0].T  # Solve for row coordinates
+        Returns:
+            numpy.ndarray: The coordinate representation of each row.
+        """
+        return np.linalg.lstsq(basis.T, matrix.T, rcond=None)[0].T  # Solve for row coordinates
 
-    # # Compute row space basis for both r_recovered_RTH and r_recovered_simple
-    # # basis_RTH = row_space_basis(r_recovered_RTH)
-    # basis_simple = row_space_basis(r_recovered, top_k=n_features)
+    # Compute row space basis for both r_recovered_RTH and r_recovered_simple
+    # basis_RTH = row_space_basis(r_recovered_RTH)
+    basis_simple = row_space_basis(r_recovered, top_k=n_features)
 
-    # def change_of_basis_matrix(B, B_prime):
-    #     """
-    #     Compute the change of basis matrix P such that B P ≈ B'.
-    #     """
-    #     P = np.linalg.pinv(B) @ B_prime
-    #     return P
+    def change_of_basis_matrix(B, B_prime):
+        """
+        Compute the change of basis matrix P such that B P ≈ B'.
+        """
+        P = np.linalg.pinv(B) @ B_prime
+        return P
 
-    # # Compute change of basis matrices for both RTH and simple
-    # # P_RTH = change_of_basis_matrix(basis_RTH, U.T)
-    # P_simple = change_of_basis_matrix(basis_simple, U.T)
+    # Compute change of basis matrices for both RTH and simple
+    # P_RTH = change_of_basis_matrix(basis_RTH, U.T)
+    P_simple = change_of_basis_matrix(basis_simple, U.T)
 
-    # # Compute coordinates with respect to the new basis for both RTH and simple
-    # # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_RTH, np.dot(basis_RTH, P_RTH))
-    # coordinates_simple = get_coordinates_wrt_row_basis(r_recovered, np.dot(basis_simple, P_simple))
-    # standardized_coordinates = (coordinates_simple.copy() - np.mean(coordinates_simple.copy(), axis=0)) / np.std(coordinates_simple.copy(), axis=0)
-    # for i, (orig_row, std_row) in enumerate(zip(coordinates_simple, standardized_coordinates)):
-    #     print(f"Original Row {i}: {orig_row}")
-    #     print(f"Standardized Row {i}: {std_row}")
-    # # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_simple, basis_simple)
+    # Compute coordinates with respect to the new basis for both RTH and simple
+    # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_RTH, np.dot(basis_RTH, P_RTH))
+    coordinates_simple = get_coordinates_wrt_row_basis(r_recovered, np.dot(basis_simple, P_simple))
+    standardized_coordinates = (coordinates_simple.copy() - np.mean(coordinates_simple.copy(), axis=0)) / np.std(coordinates_simple.copy(), axis=0)
+    for i, (orig_row, std_row) in enumerate(zip(coordinates_simple, standardized_coordinates)):
+        print(f"Original Row {i}: {orig_row}")
+        print(f"Standardized Row {i}: {std_row}")
+    # coordinates_RTH = get_coordinates_wrt_row_basis(r_recovered_simple, basis_simple)
     
 
-    # print("coordinates_simple", coordinates_simple.shape, "rec_weights_ashwood", rec_weights_ashwood.shape, "time_varying_weights", time_varying_weights.shape)
+    print("coordinates_simple", coordinates_simple.shape, "rec_weights_ashwood", rec_weights_ashwood.shape, "time_varying_weights", time_varying_weights.shape)
 
-    # plot_time_varying_weights(time_varying_weights,  coordinates_simple[:,:-1],rec_weights_ashwood, T)
-    # # plot_time_varying_weights(time_varying_weights, coordinates_simple, T)
+    plot_time_varying_weights(time_varying_weights,  coordinates_simple,rec_weights_ashwood, T)
+    # plot_time_varying_weights(time_varying_weights, coordinates_simple, T)
 
 
 
-    # projected_features = np.dot(basis_simple, P_simple)
+    projected_features = np.dot(basis_simple, P_simple)
 
-    # # print(projected_features)
-    # first_row = projected_features[0, :]
-    # second_row = projected_features[1, :]
-    # third_row = projected_features[2, :]
-    # n_states = gw.n_states  # Assuming n_states is defined in the context
+    # print(projected_features)
+    first_row = projected_features[0, :]
+    second_row = projected_features[1, :]
+    third_row = projected_features[2, :]
+    n_states = gw.n_states  # Assuming n_states is defined in the context
 
-    # vectors_first_row = [first_row[i * n_states:(i + 1) * n_states] for i in range(5)]
-    # vectors_second_row = [second_row[i * n_states:(i + 1) * n_states] for i in range(5)]
-    # vectors_third_row = [third_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    vectors_first_row = [first_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    vectors_second_row = [second_row[i * n_states:(i + 1) * n_states] for i in range(5)]
+    vectors_third_row = [third_row[i * n_states:(i + 1) * n_states] for i in range(5)]
     
-    # # Plot the heatmaps
-    # fig, axes = plt.subplots(3, 5, figsize=(20, 12))
+    # Plot the heatmaps
+    fig, axes = plt.subplots(3, 5, figsize=(20, 12))
 
-    # for i, ax in enumerate(axes[0]):
-    #     sns.heatmap(vectors_first_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
-    #     ax.set_title(f'Action {i}')
-    #     ax.set_yticks(range(5))
-    #     ax.set_yticklabels(range(5))
-    #     ax.set_xticks([])
+    for i, ax in enumerate(axes[0]):
+        sns.heatmap(vectors_first_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
+        ax.set_title(f'Action {i}')
+        ax.set_yticks(range(5))
+        ax.set_yticklabels(range(5))
+        ax.set_xticks([])
 
-    # for i, ax in enumerate(axes[1]):
-    #     sns.heatmap(vectors_second_row[i].reshape(5, 5).T, ax=ax, cbar=True, annot=True, fmt=".2f")
-    #     ax.set_title(f'Action {i}')
-    #     ax.set_yticks(range(5))
-    #     ax.set_yticklabels(range(5))
-    #     ax.set_xticks([])
+    for i, ax in enumerate(axes[1]):
+        sns.heatmap(vectors_second_row[i].reshape(5, 5).T, ax=ax, cbar=True, annot=True, fmt=".2f")
+        ax.set_title(f'Action {i}')
+        ax.set_yticks(range(5))
+        ax.set_yticklabels(range(5))
+        ax.set_xticks([])
 
-    # for i, ax in enumerate(axes[2]):
-    #     sns.heatmap(vectors_third_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
-    #     ax.set_title(f'Action {i}')
-    #     ax.set_yticks(range(5))
-    #     ax.set_yticklabels(range(5))
-    #     ax.set_xticks([])
+    for i, ax in enumerate(axes[2]):
+        sns.heatmap(vectors_third_row[i].reshape(5, 5), ax=ax, cbar=True, annot=True, fmt=".2f")
+        ax.set_title(f'Action {i}')
+        ax.set_yticks(range(5))
+        ax.set_yticklabels(range(5))
+        ax.set_xticks([])
 
-    # plt.suptitle('Recovered Features')
-    # plt.tight_layout()
+    plt.suptitle('Recovered Features')
+    plt.tight_layout()
 
-    # plt.savefig('results/problem3/features.png')
-
-
+    plt.savefig('results/problem3/features.png')
 
 
-    # final_rec_goal_maps = pickle.load(open(GEN_DIR_NAME + 
-    #                                 "/output_data.pickle", 'rb'))['final_rec_goal_maps']
 
-    # feature_maps_0 = final_rec_goal_maps[0]
-    # feature_maps_1 = final_rec_goal_maps[1]
 
-    # fig, axes = plt.subplots(1, 2, figsize=(20, 8))
+    final_rec_goal_maps = pickle.load(open(GEN_DIR_NAME + 
+                                    "/output_data.pickle", 'rb'))['final_rec_goal_maps']
 
-    # # Define grid dimensions
-    # grid_H, grid_W = 5, 5
+    feature_maps_0 = final_rec_goal_maps[0]
+    feature_maps_1 = final_rec_goal_maps[1]
 
-    # # Plot the heatmap on the left
-    # sns.heatmap(vectors_first_row[0].reshape(grid_H, grid_W), ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
-    # axes[0].set_yticks(range(grid_H))
-    # axes[0].set_yticklabels(range(grid_H), fontsize=16)
-    # axes[0].set_xticks([])
+    fig, axes = plt.subplots(1, 2, figsize=(20, 8))
 
-    # # Plot the heatmap on the right using sns
-    # sns.heatmap(np.reshape(final_rec_goal_maps[0], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
-    # axes[1].set_yticks(range(grid_H))
-    # axes[1].set_yticklabels(range(grid_H), fontsize=16)
-    # axes[1].set_xticks([])
+    # Define grid dimensions
+    grid_H, grid_W = 5, 5
 
-    # plt.tight_layout()
+    # Plot the heatmap on the left
+    sns.heatmap(vectors_first_row[0].reshape(grid_H, grid_W), ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    axes[0].set_yticks(range(grid_H))
+    axes[0].set_yticklabels(range(grid_H), fontsize=16)
+    axes[0].set_xticks([])
 
-    # plt.savefig('results/problem3/comparison_home.png')
+    # Plot the heatmap on the right using sns
+    sns.heatmap(np.reshape(final_rec_goal_maps[0], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    axes[1].set_yticks(range(grid_H))
+    axes[1].set_yticklabels(range(grid_H), fontsize=16)
+    axes[1].set_xticks([])
 
-    # fig, axes = plt.subplots(1, 2, figsize=(20, 8))
+    plt.tight_layout()
 
-    # # Plot the heatmap on the left
-    # sns.heatmap(vectors_second_row[0].reshape(grid_H, grid_W).T, ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
-    # axes[0].set_yticks(range(grid_H))
-    # axes[0].set_yticklabels(range(grid_H), fontsize=16)
-    # axes[0].set_xticks([])
+    plt.savefig('results/problem3/comparison_home.png')
 
-    # # Plot the heatmap on the right using sns
-    # sns.heatmap(np.reshape(final_rec_goal_maps[1], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
-    # axes[1].set_yticks(range(grid_H))
-    # axes[1].set_yticklabels(range(grid_H), fontsize=16)
-    # axes[1].set_xticks([])
+    fig, axes = plt.subplots(1, 2, figsize=(20, 8))
 
-    # plt.tight_layout()
+    # Plot the heatmap on the left
+    sns.heatmap(vectors_second_row[0].reshape(grid_H, grid_W).T, ax=axes[0], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    axes[0].set_yticks(range(grid_H))
+    axes[0].set_yticklabels(range(grid_H), fontsize=16)
+    axes[0].set_xticks([])
 
-    # plt.savefig('results/problem3/comparison_water.png')
+    # Plot the heatmap on the right using sns
+    sns.heatmap(np.reshape(final_rec_goal_maps[1], (grid_H, grid_W), order='F'), ax=axes[1], cbar=True, annot=True, fmt=".2f", annot_kws={"size": 16})
+    axes[1].set_yticks(range(grid_H))
+    axes[1].set_yticklabels(range(grid_H), fontsize=16)
+    axes[1].set_xticks([])
+
+    plt.tight_layout()
+
+    plt.savefig('results/problem3/comparison_water.png')
