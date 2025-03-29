@@ -35,22 +35,20 @@ class SlipperyGridWorld(object):
     
         self.reward = reward
 
-        # # Preconstruct the transition probability array.
-        # self.transition_probability = np.array(
-        #     [[[self._transition_probability(i, j, k)
-        #        for k in range(self.n_states)]
-        #       for j in range(self.n_actions)]
-        #      for i in range(self.n_states)])
+        # Preconstruct the transition probability array.
+        self.transition_probability = np.array(
+            [[[self._transition_probability(i, j, k)
+               for k in range(self.n_states)]
+              for j in range(self.n_actions)]
+             for i in range(self.n_states)])
         
 
 
-        # self.normalize_transition_matrices()
+        self.normalize_transition_matrices()
         
         self.P = []
         for a in range(self.n_actions):
-            matrix = np.random.rand(self.n_states, self.n_states)  # Random values in [0, 1)
-            matrix /= matrix.sum(axis=1, keepdims=True)  # Normalize rows to sum to 1
-            Pa = matrix
+            Pa = self.transition_probability[:,a,:]
             self.P.append(Pa)
 
         self.reward = reward
@@ -120,12 +118,10 @@ class SlipperyGridWorld(object):
             return 0.0
         
         # Is i center point and we are in slippery MDP? Then, all transitions have 1/5 probability
-        if self.slippery and yi == self.grid_size//2:
+        if self.slippery and yi == self.grid_size//2 and xi == self.grid_size//2:
             # Is k the intended state to move to?
-            if (xi + xj, yi + yj) == (xk, yk):
-                return 0
-            else:
-                return 1/(self.n_actions - 1)
+            return 1/5
+
 
         # Is k the intended state to move to?
         if (xi + xj, yi + yj) == (xk, yk):
