@@ -31,7 +31,7 @@ class BasicGridWorld(object):
         self.discount = discount
         self.horizon = horizon
     
-        self.reward = reward
+        # self.reward = reward
 
         # Preconstruct the transition probability array.
         self.transition_probability = np.array(
@@ -49,7 +49,7 @@ class BasicGridWorld(object):
             Pa = self.transition_probability[:,a,:]
             self.P.append(Pa)
 
-        self.reward = reward
+        # self.reward = reward
 
   
     def int_to_point(self, i):

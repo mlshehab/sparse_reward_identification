@@ -1,6 +1,5 @@
 import numpy as np
 from numba import njit, prange, set_num_threads
-from dynamics import BasicGridWorld
 
 
 @njit(parallel=True)
@@ -96,42 +95,5 @@ def compute_likelihood(policy: np.ndarray, visit_counts: np.ndarray, action_coun
 
     # Exponentiate the log-likelihood to get the likelihood
     # likelihood = np.exp(log_likelihood)
-    return log_likelihood
-
-
-def generate_and_save_rewards(seed, horizon, number_of_switches):
-        import random
-        grid_size = 5
-        wind = 0.1
-        discount = 0.9
-        # horizon = 50
-        reward = 1
-
-        # number_of_switches = 5
-        min_switch_mag = 0.1
-        max_switch_mag = 0.4
-        magnitude_by_switch = (max_switch_mag-min_switch_mag)/number_of_switches
-
-
-        np.random.seed(seed)
-        gw = BasicGridWorld(grid_size, wind, discount, horizon, reward)
-        # now obtain time-varying reward maps
-
-        reward_switch_times = sorted(np.random.choice(gw.horizon-3, number_of_switches, replace=False) + 1) ### Ensures the switches do not occur at the last and first steps
-        print("True reward switch times: ", reward_switch_times)
-        reward_switch_intervals = [0] + reward_switch_times + [gw.horizon]
-        reward_functions = [np.random.uniform(0,1,(gw.n_states,gw.n_actions))]
-        switch_magnitudes = [min_switch_mag + i*magnitude_by_switch for i in range(number_of_switches)]
-
-        switch_magnitudes = random.sample(switch_magnitudes, len(switch_magnitudes))
-
-        for i in range(number_of_switches):
-            reward_functions += [reward_functions[i] + np.random.uniform(0,switch_magnitudes[i],(gw.n_states,gw.n_actions))]
-
-        reward = np.zeros(shape=(gw.horizon, gw.n_states, gw.n_actions))
-        for k in range(number_of_switches + 1):
-            for t in range(reward_switch_intervals[k], reward_switch_intervals[k+1]):
-                reward[t,:,:] = reward_functions[k]
-
-        np.save(f"data/rewards/reward_{seed}_{number_of_switches}.npy", reward)
-        np.save(f"data/rewards/switch_{seed}_{number_of_switches}.npy", np.array(reward_switch_times))
+    assert action_counts.sum() == visit_counts.sum()
+    return log_likelihood/visit_counts.sum()
