@@ -7,12 +7,12 @@ import matplotlib.pyplot as plt
 inf  = float("inf")
 
 
-class BasicGridWorld(object):
+class SlipperyGridWorld(object):
     """
     Gridworld MDP.
     """
 
-    def __init__(self, grid_size, wind, discount,horizon, reward):
+    def __init__(self, grid_size, wind, discount,horizon, reward, slippery):
         """
         grid_size: Grid size. int.
         wind: Chance of moving randomly. float.
@@ -28,10 +28,12 @@ class BasicGridWorld(object):
         self.wind = wind
         self.wind_buffer = wind
         
+        self.slippery = slippery
+
         self.discount = discount
         self.horizon = horizon
     
-        # self.reward = reward
+        self.reward = reward
 
         # Preconstruct the transition probability array.
         self.transition_probability = np.array(
@@ -49,7 +51,7 @@ class BasicGridWorld(object):
             Pa = self.transition_probability[:,a,:]
             self.P.append(Pa)
 
-        # self.reward = reward
+        self.reward = reward
 
   
     def int_to_point(self, i):
@@ -114,6 +116,12 @@ class BasicGridWorld(object):
 
         if not self.neighbouring((xi, yi), (xk, yk)):
             return 0.0
+        
+        # Is i center point and we are in slippery MDP? Then, all transitions have 1/5 probability
+        if self.slippery and yi == self.grid_size//2 and xi == self.grid_size//2:
+            # Is k the intended state to move to?
+            return 1/5
+
 
         # Is k the intended state to move to?
         if (xi + xj, yi + yj) == (xk, yk):

@@ -102,10 +102,10 @@ def check_feasibility(gw, pi, r, nu, b):
     for t in range(T-1):
         for s in range(n_states):
             for a in range(n_actions):
-                if not (r[t, s, a] - epsilon <= np.log(pi[t, s, a]) + b[t, s] + nu[t,s] 
+                if not (r[t, s, a] - epsilon <= np.log(pi[t, s, a]) + b[t, s, a] + nu[t,s] 
                                - gamma * np.sum([P[a][s, j] * nu[t+1, j] for j in range(n_states)])):
                     return False
-                elif not (r[t, s, a] + epsilon >= np.log(pi[t, s, a]) - b[t, s] + nu[t,s] 
+                elif not (r[t, s, a] + epsilon >= np.log(pi[t, s, a]) - b[t, s, a] + nu[t,s] 
                                   - gamma * np.sum([P[a][s, j] * nu[t+1, j] for j in range(n_states)])):
                     return False
         print(f"Time {t} is feasible")
@@ -113,9 +113,9 @@ def check_feasibility(gw, pi, r, nu, b):
     # Add constraints for the last time step
     for s in range(n_states):
         for a in range(n_actions):
-            if not (r[T-1, s, a] - epsilon <= np.log(pi[T-1, s, a]) + b[T-1, s] + nu[T-1, s]):
+            if not (r[T-1, s, a] - epsilon <= np.log(pi[T-1, s, a]) + b[T-1, s, a] + nu[T-1, s]):
                 return False
-            elif not (r[T-1, s, a] + epsilon >= np.log(pi[T-1, s, a]) - b[T-1, s] + nu[T-1, s]):
+            elif not (r[T-1, s, a] + epsilon >= np.log(pi[T-1, s, a]) - b[T-1, s, a] + nu[T-1, s]):
                 return False
     print(f"Time {T-1} is feasible")
     return True     
@@ -124,7 +124,7 @@ def run_problem_1(num_trajectories, seed):
     '''
     This function compares the solutions found by Greedy-Linear to MILP over some randomly generated MDPs
     '''
-    reward_path = f"data/rewards/reward_{seed}.npy"
+    output_path = "results/problem1_new_rewards/"
     print(f"{num_trajectories=}")
     grid_size = 5
     wind = 0.1
@@ -132,16 +132,17 @@ def run_problem_1(num_trajectories, seed):
     horizon = 50
     reward = 1
     np.random.seed(1)
-    for number_of_switches in [8]:
+    for number_of_switches in [5]:
         for _ in range(NUMBER_OF_EXPERIMENTS):
+            reward_path = f"data/rewards/reward_{seed}_{number_of_switches}.npy"
 
             gw = BasicGridWorld(grid_size, wind, discount, horizon, reward)
             # now obtain time-varying reward maps
             if os.path.exists(reward_path):
-                reward = np.load(f"data/rewards/reward_{seed}.npy")
+                reward = np.load(reward_path)
             else:
                 generate_and_save_rewards(seed)
-                reward = np.load(f"data/rewards/reward_{seed}.npy")
+                reward = np.load(reward_path)
 
             V, Q, pi = soft_bellman_operation(gw, reward)
 
@@ -161,33 +162,41 @@ def run_problem_1(num_trajectories, seed):
 
             log_term = np.log(2 / (1 - delta))
 
-            b = np.full((gw.horizon, gw.n_states), 1e3)  # default to inf for unvisited
+            b = np.full((gw.horizon, gw.n_states, gw.n_actions), 1e3)  # default to inf for unvisited
 
             # Where visits > 0, compute epsilon and b
             visited_mask = visit_counts > 0
             epsilons = np.zeros_like(visit_counts, dtype=np.float64)
             epsilons[visited_mask] = np.sqrt(1 / (2 * visit_counts[visited_mask]) * log_term)
 
-            # Compute b where valid
+            # Compute alpha[t, s, a] = pi_hat[t, s, a] - epsilons[t, s]
+            epsilon_broadcast = np.broadcast_to(epsilons[:, :, np.newaxis], pi_hat.shape)  # shape (H, S, A)
+            alpha = pi_hat - epsilon_broadcast
 
-            sum_array = pi_hat - epsilons[:, :, np.newaxis]
-            # Find the minimal value
-            alpha = min(np.min(sum_array), pi_hat.min())
+            # Assert all alpha values are positive where visited
+            visited_mask_3d = np.broadcast_to(visited_mask[:, :, np.newaxis], alpha.shape)
+            print(alpha.min())
+            assert np.all(alpha[visited_mask_3d] > 0), "Alpha contains non-positive values!"
 
-            print(f"{alpha=}, {pi.min()=}, {pi_hat.min()=}")
+            # Avoid division by zero or negative alpha values
+            safe_mask = visited_mask_3d & (alpha > 0)
 
-            b[visited_mask] = epsilons[visited_mask] / alpha
+            # b = np.full_like(pi_hat, 1e3)
+            b[safe_mask] = epsilon_broadcast[safe_mask] / alpha[safe_mask]
+            print(b.shape)
 
-
-            # epsilons has shape (H, S)
-            # We need to compare (H, S, A) arrays, so expand epsilons
-            epsilon_broadcast = epsilons[:, :, np.newaxis]  # shape (H, S, 1)
+            # Check b for irregularities and print them
+            irregular_mask = (b < 0) | ~np.isfinite(b) | np.isnan(b)
+            irregular_indices = np.argwhere(irregular_mask)
+            for t, s, a in irregular_indices:
+                print(f"Irregular b at (t={t}, s={s}, a={a}): b={b[t, s, a]}, epsilon={epsilons[t, s]}, alpha={alpha[t, s, a]}")
 
             # Compute fraction of (t, s, a) entries where deviation exceeds epsilon
             violation_fraction = np.sum(np.abs(pi - pi_hat) > epsilon_broadcast) / (gw.horizon * gw.n_states * gw.n_actions)
 
             print("Violation fraction: ", violation_fraction)
             print(f"{epsilons.max()=}, {epsilons.min()=}")
+
 
             start_time = time.time()
             if num_trajectories == 1:
@@ -200,35 +209,42 @@ def run_problem_1(num_trajectories, seed):
             print("Greedy:", switch_times)
 
             if num_trajectories == 1:
-                if check_feasibility(gw, pi, r_greedy, nu_greedy, np.zeros_like(b)):
-                    print("Greedy solution is feasible")
-                else:
-                    print("Solution is infeasible")
+                assert check_feasibility(gw, pi, r_greedy, nu_greedy, np.zeros_like(b))
+                    # print("Greedy solution is feasible")
+                # else:
+                    # print("Solution is infeasible")
             else:
-                if check_feasibility(gw, pi_hat, r_greedy, nu_greedy, b):
-                    print("Greedy solution is feasible")
-                else:
-                    print("Greedy solution is infeasible")
-                    print("Checking feasibility of rewards only")
-                    if check_feasibility_reward(gw, pi_hat, r_greedy, b):
-                        print("Greedy solution is REWARD feasible")
-                    else:
-                        print("Greedy solution is not even REWARD feasible")
+                assert check_feasibility(gw, pi_hat, r_greedy, nu_greedy, b)
+                #     print("Greedy solution is feasible")
+                # else:
+                #     print("Greedy solution is infeasible")
+                #     print("Checking feasibility of rewards only")
+                #     if check_feasibility_reward(gw, pi_hat, r_greedy, b):
+                #         print("Greedy solution is REWARD feasible")
+                #     else:
+                #         print("Greedy solution is not even REWARD feasible")
 
 
 
-            np.save(f"results/problem1/{seed=}, {num_trajectories=}_switches.npy", np.array(switch_times))
-            np.save(f"results/problem1/{seed=}, {num_trajectories=}_rewards.npy", np.array(r_greedy))
-            np.save(f"results/problem1/{seed=}, {num_trajectories=}_values.npy", np.array(nu_greedy))
+            np.save(output_path + f"{seed=}, {num_trajectories=}_switches.npy", np.array(switch_times))
+            np.save(output_path + f"{seed=}, {num_trajectories=}_rewards.npy", np.array(r_greedy))
+            np.save(output_path + f"{seed=}, {num_trajectories=}_values.npy", np.array(nu_greedy))
 
 
 def generate_and_save_rewards(seed):
+        import random
         grid_size = 5
         wind = 0.1
         discount = 0.9
         horizon = 50
         reward = 1
-        number_of_switches = 8
+
+        number_of_switches = 5
+        min_switch_mag = 0.1
+        max_switch_mag = 0.4
+        magnitude_by_switch = (max_switch_mag-min_switch_mag)/number_of_switches
+
+
         np.random.seed(seed)
         gw = BasicGridWorld(grid_size, wind, discount, horizon, reward)
         # now obtain time-varying reward maps
@@ -237,17 +253,20 @@ def generate_and_save_rewards(seed):
         print("True reward switch times: ", reward_switch_times)
         reward_switch_intervals = [0] + reward_switch_times + [gw.horizon]
         reward_functions = [np.random.uniform(0,1,(gw.n_states,gw.n_actions))]
-        magnitude_by_switch = 1./number_of_switches
+        switch_magnitudes = [min_switch_mag + i*magnitude_by_switch for i in range(number_of_switches)]
+
+        switch_magnitudes = random.sample(switch_magnitudes, len(switch_magnitudes))
+
         for i in range(number_of_switches):
-            reward_functions += [reward_functions[i] + np.random.uniform(0,i*magnitude_by_switch,(gw.n_states,gw.n_actions))]
+            reward_functions += [reward_functions[i] + np.random.uniform(0,switch_magnitudes[i],(gw.n_states,gw.n_actions))]
 
         reward = np.zeros(shape=(gw.horizon, gw.n_states, gw.n_actions))
         for k in range(number_of_switches + 1):
             for t in range(reward_switch_intervals[k], reward_switch_intervals[k+1]):
                 reward[t,:,:] = reward_functions[k]
 
-        np.save(f"data/rewards/reward_{seed}.npy", reward)
-        np.save(f"data/rewards/switch_{seed}.npy", np.array(reward_switch_times))
+        np.save(f"data/rewards/reward_{seed}_{number_of_switches}.npy", reward)
+        np.save(f"data/rewards/switch_{seed}_{number_of_switches}.npy", np.array(reward_switch_times))
             
 
 
@@ -257,10 +276,10 @@ if __name__ == "__main__":
     from itertools import product
 
     # Define your input lists
-    seed_list = [1, 2, 3]
-    # num_traj_list = [1_000_000, 2_000_000, 4_000_000, 8_000_000]
+    seed_list = [4,5,6,7,8,9,10]
+    num_traj_list = [200_000, 400_000, 800_000, 1_000_000, 2_000_000, 4_000_000, 8_000_000]
     # num_traj_list = [12_000_000, 16_000_000, 24_000_000]#, 8_000_000]
-    num_traj_list = [120_000_000, 240_000_000]#[36_000_000, 48_000_000, 60_000_000]#, 8_000_000]
+    # num_traj_list = [120_000_000, 240_000_000]#[36_000_000, 48_000_000, 60_000_000]#, 8_000_000]
 
     for seed in seed_list:
         generate_and_save_rewards(seed)
