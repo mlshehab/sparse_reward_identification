@@ -232,16 +232,16 @@ if __name__ == "__main__":
                         true_reward[t, s, a] *= 100
                         
     
-    # true_reward_matrix = np.zeros((bgw.horizon, bgw.n_states * bgw.n_actions))
+    true_reward_matrix = np.zeros((bgw.horizon, bgw.n_states * bgw.n_actions))
 
-    # for t in range(bgw.horizon):
-    #     for s in range(bgw.n_states):
-    #         for a in range(bgw.n_actions):
-    #             idx = s + a * bgw.n_states
-    #             true_reward_matrix[t, idx] = (
-    #                 U[idx, 0] * time_varying_weights[t, 0] +
-    #                 U[idx, 1] * time_varying_weights[t, 1]
-    #             )
+    for t in range(bgw.horizon):
+        for s in range(bgw.n_states):
+            for a in range(bgw.n_actions):
+                idx = s + a * bgw.n_states
+                true_reward_matrix[t, idx] = (
+                    U[idx, 0] * time_varying_weights[t, 0] +
+                    U[idx, 1] * time_varying_weights[t, 1]
+                )
   
     V, Q, pi = soft_bellman_operation(bgw, true_reward)
     start_state = 7

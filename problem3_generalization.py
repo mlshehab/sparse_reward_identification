@@ -377,10 +377,26 @@ if __name__ == "__main__":
     r_recovered, nu_recovered = solve_PROBLEM_3_noisy(gw, U, sigmas, pi_hat, b)
     r_recovered = r_recovered.reshape(horizon, gw.n_states, gw.n_actions, order='F')
 
+    rec_weights = pickle.load(open(GEN_DIR_NAME + 
+                                    "/output_data.pickle", 'rb'))['rec_rewards']
+
+
+    # print(rec_weights.shape)
+    r_recovered_ashwood = np.zeros((gw.horizon, gw.n_states * gw.n_actions))
+
+    for t in range(gw.horizon):
+        for s in range(gw.n_states):
+            for a in range(gw.n_actions):
+                r_recovered_ashwood[t, s ,a] = U[s + a * gw.n_states,0] * time_varying_weights[t,0] \
+                        + U[s + a * gw.n_states, 1] * time_varying_weights[t,1]
+
+
+
+
     gw2 = BlockedGridWorld(grid_size, wind, GAMMA, horizon, None)
     _, _, pi2 = soft_bellman_operation(gw2, true_reward)
     _, _, pi_recovered_2  = soft_bellman_operation(gw2, r_recovered)
-
+    _, _, pi_recovered_ashwood = soft_bellman_operation(gw2, r_recovered_ashwood)
 
     # _, _, pi_hat_hat = soft_bellman_operation(gw, r_recovered)
 
@@ -401,10 +417,9 @@ if __name__ == "__main__":
     print("Pi Double Hat: ", pi_hat_hat_likelihood)
     print("Uniform Policy: ", uniform_likelihood)
 
-    rec_weights = pickle.load(open(GEN_DIR_NAME + 
-                                    "/output_data.pickle", 'rb'))['rec_rewards']
+    
 
-    print(rec_weights.shape)
+    # print(rec_weights.shape)
     # print(rec_weights.shape)
     # rw_ashwood = rec_weights.T
     
