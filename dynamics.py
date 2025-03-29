@@ -226,13 +226,13 @@ class BasicGridWorld(object):
     def reset(self,start_state):
         self.state = start_state
 
-    def step(self, action):
+    def step(self, state,action):
         """
         Take a step in the environment.
         action: Action int.
         -> Next state int.
         """
-        state = self.state
+        # state = self.state
         probabilities = self.transition_probability[state, action]
         next_state = np.random.choice(self.n_states, p=probabilities)
         return next_state
@@ -251,13 +251,13 @@ class BasicGridWorld(object):
         action_dict_reverse = {v: k for k, v in self.action_dict.items()}
         for t in range(self.horizon):
             action = np.random.choice(self.n_actions, p=policy[t, state])
-            next_state = self.step(action)
+            next_state = self.step(state, action)
             print(f"Time: {t}, State: {state}, Action: {action_dict_reverse[action]}, Next State: {next_state}")
             state = next_state
             trajectory.append(state)
             # if state == self.n_states - 1:  # Goal state
             #     break
-            self.state = state
+            # self.state = state
         return trajectory
 
     def visualize_trajectory(self, trajectory):
@@ -318,7 +318,10 @@ class BlockedGridWorld(BasicGridWorld):
             self.transition_probability[6, a, 5] = 0.0
             self.transition_probability[11, a, 10] = 0.0
             self.transition_probability[16, a, 15] = 0.0
-
+            self.transition_probability[16, a, 21] = 0.0
+            self.transition_probability[17, a, 22] = 0.0
+            self.transition_probability[18, a, 23] = 0.0
+            
         self.normalize_transition_matrices()
 
         self.P = []
