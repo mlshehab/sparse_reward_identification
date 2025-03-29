@@ -408,6 +408,7 @@ if __name__ == "__main__":
     pi_hat_likelihood = compute_likelihood(pi_hat, visit_counts_val, action_counts_val)
     pi_likelihood = compute_likelihood(pi, visit_counts_val, action_counts_val)
     pi2_likelihood = compute_likelihood(pi2, visit_counts_val, action_counts_val)
+    pi_recovered_ashwood_likelihood = compute_likelihood(pi_recovered_ashwood, visit_counts_val, action_counts_val)
     uniform_likelihood = compute_likelihood(np.ones_like(pi2)/gw2.n_actions, visit_counts_val, action_counts_val)
 
     print("Log likelihoods")
@@ -415,6 +416,7 @@ if __name__ == "__main__":
     print("Pi_2: ", pi2_likelihood)
     print("Pi Hat: ", pi_hat_likelihood)
     print("Pi Double Hat: ", pi_hat_hat_likelihood)
+    print("Pi Recovered Ashwood: ", pi_recovered_ashwood_likelihood)
     print("Uniform Policy: ", uniform_likelihood)
 
     
