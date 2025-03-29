@@ -21,7 +21,7 @@ class BasicGridWorld(object):
         """
         self.actions = ((1, 0), (0, 1), (-1, 0), (0, -1), (0, 0))  # Added (0, 0) for stay action
         self.action_dict = {"down": 0, "right": 1, "up": 2, "left": 3, "stay": 4}
-
+        self.action_dict_inverse = {v: k for k, v in self.action_dict.items()}
         self.n_actions = len(self.actions)
         self.n_states = grid_size**2
         self.grid_size = grid_size
@@ -31,7 +31,7 @@ class BasicGridWorld(object):
         self.discount = discount
         self.horizon = horizon
     
-        # self.reward = reward
+        self.reward = reward
 
         # Preconstruct the transition probability array.
         self.transition_probability = np.array(
@@ -49,7 +49,7 @@ class BasicGridWorld(object):
             Pa = self.transition_probability[:,a,:]
             self.P.append(Pa)
 
-        # self.reward = reward
+        self.reward = reward
 
   
     def int_to_point(self, i):
@@ -291,3 +291,38 @@ class BasicGridWorld(object):
         sm.set_array([])
         plt.colorbar(sm, label='Time Step')
         plt.show()
+
+
+class BlockedGridWorld(BasicGridWorld):
+    """
+    Slippery Gridworld MDP.
+    """
+
+    def __init__(self, grid_size, wind, discount, horizon, reward):
+        """
+        grid_size: Grid size. int.
+        wind: Chance of moving randomly. float.
+        discount: MDP discount. float.
+        horizon: Time horizon. int.
+        reward: Reward structure.
+        slip_probability: Probability of slipping to a random adjacent state. float.
+        """
+        super().__init__(grid_size, wind, discount, horizon, reward)
+        
+        
+        # Block certain state transitions
+        action_up = self.action_dict["up"]
+
+        for a in range(self.n_actions):
+            self.transition_probability[1, a, 0] = 0.0
+            self.transition_probability[6, a, 5] = 0.0
+            self.transition_probability[11, a, 10] = 0.0
+            self.transition_probability[16, a, 15] = 0.0
+
+        self.normalize_transition_matrices()
+
+        self.P = []
+        for a in range(self.n_actions):
+            Pa = self.transition_probability[:,a,:]
+            self.P.append(Pa)
+
