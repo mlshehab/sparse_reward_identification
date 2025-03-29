@@ -196,8 +196,8 @@ if __name__ == "__main__":
     print("time_varying_weights", time_varying_weights.shape)
 
     # gw1 = BasicGridWorld(grid_size, wind, GAMMA, horizon, 0)
-    bgw = BlockedGridWorld(grid_size, wind, GAMMA, horizon, 0)
-
+    bgw = BasicGridWorld(grid_size, wind, GAMMA, horizon, 0)
+    np.save("results/problem3/gw_P.npy", bgw.P)
     
 
 
@@ -249,15 +249,3 @@ if __name__ == "__main__":
     # print(traj)
     bgw.visualize_trajectory(traj)
 
-
-
-    # V2, Q2, pi2 = soft_bellman_operation(bgw, true_reward)
-
-    # # Calculate the norm difference between the policies
-    # policy_diff = np.linalg.norm(pi1 - pi2, axis=1)
-
-    # # Print the norm difference for each time step
-    # for t, diff in enumerate(policy_diff):
-    #     print(f"Time Step {t}: Policy Norm Difference = {diff}")
-
- 

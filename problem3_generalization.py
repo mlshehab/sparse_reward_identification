@@ -387,8 +387,7 @@ if __name__ == "__main__":
     for t in range(gw.horizon):
         for s in range(gw.n_states):
             for a in range(gw.n_actions):
-                r_recovered_ashwood[t, s ,a] = U[s + a * gw.n_states,0] * time_varying_weights[t,0] \
-                        + U[s + a * gw.n_states, 1] * time_varying_weights[t,1]
+                r_recovered_ashwood[t, s ,a] = rec_weights[t, s]
 
 
 
