@@ -379,11 +379,13 @@ if __name__ == "__main__":
 
     rec_weights = pickle.load(open(GEN_DIR_NAME + 
                                     "/output_data.pickle", 'rb'))['rec_rewards']
+    
+    rec_weights_MaxEntIRL = np.load('data/static_MaxEntIRL_reward.npy')
 
 
     # print(rec_weights.shape)
     r_recovered_ashwood = np.zeros((gw.horizon, gw.n_states, gw.n_actions))
-
+    r_recovered_MaxEntIRL = np.zeros((gw.horizon, gw.n_states, gw.n_actions))
     # for t in range(gw.horizon):
     #     for s in range(gw.n_states):
     #         for a in range(gw.n_actions):
@@ -394,14 +396,14 @@ if __name__ == "__main__":
             for s in range(gw.n_states):
                 for a in range(gw.n_actions):
                     r_recovered_ashwood[t, s ,a] = rec_weights[t, s]
-
+                    r_recovered_MaxEntIRL[t, s ,a] = rec_weights_MaxEntIRL[t, s]
 
 
     gw2 = BlockedGridWorld(grid_size, wind, GAMMA, horizon, None)
     _, _, pi2 = soft_bellman_operation(gw2, true_reward)
     _, _, pi_recovered_2  = soft_bellman_operation(gw2, r_recovered)
     _, _, pi_recovered_ashwood = soft_bellman_operation(gw2, r_recovered_ashwood)
-
+    _, _, pi_recovered_MaxEntIRL = soft_bellman_operation(gw2, r_recovered_MaxEntIRL)
     # _, _, pi_hat_hat = soft_bellman_operation(gw, r_recovered)
 
     P = np.asarray(gw2.P, dtype=np.float64)     # shape (A, S, S)
@@ -413,6 +415,7 @@ if __name__ == "__main__":
     pi_likelihood = compute_likelihood(pi, visit_counts_val, action_counts_val)
     pi2_likelihood = compute_likelihood(pi2, visit_counts_val, action_counts_val)
     pi_recovered_ashwood_likelihood = compute_likelihood(pi_recovered_ashwood, visit_counts_val, action_counts_val)
+    pi_recovered_MaxEntIRL_likelihood = compute_likelihood(pi_recovered_MaxEntIRL, visit_counts_val, action_counts_val)
     uniform_likelihood = compute_likelihood(np.ones_like(pi2)/gw2.n_actions, visit_counts_val, action_counts_val)
 
     print("Log likelihoods")
@@ -421,6 +424,7 @@ if __name__ == "__main__":
     print("Pi Hat: ", pi_hat_likelihood)
     print("Pi Double Hat: ", pi_hat_hat_likelihood)
     print("Pi Recovered Ashwood: ", pi_recovered_ashwood_likelihood)
+    print("Pi Recovered MaxEntIRL: ", pi_recovered_MaxEntIRL_likelihood)
     print("Uniform Policy: ", uniform_likelihood)
 
     

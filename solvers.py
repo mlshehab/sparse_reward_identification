@@ -1,6 +1,6 @@
-import gurobipy as gp
+# import gurobipy as gp
 import cvxpy as cp
-from gurobipy import GRB
+# from gurobipy import GRB
 import numpy as np
 from scipy.linalg import sqrtm
 from scipy.linalg import fractional_matrix_power
@@ -736,6 +736,48 @@ def solve_PROBLEM_2_cvxpy(gw, U, sigmas, pi):
     r_reshaped = r.value.reshape(T, n_actions, n_states).transpose(0, 2, 1)  # Convert to (T, n_states, n_actions)
 
     return alpha_values, (r_reshaped, nu.value, alpha_values)  # Placeholder for extract_solution
+
+
+def solve_PROBLEM_3_feasibility(gw, U, sigmas, pi):
+    
+
+    T, n_states, n_actions, gamma, P = gw.horizon, gw.n_states, gw.n_actions, gw.discount, gw.P
+    n_features = U.shape[1]
+
+    # Decision variables
+    r = cp.Variable((T, n_states * n_actions))  # Flattened reward matrix
+    nu = cp.Variable((T, n_states))
+    # alpha = cp.Variable((T, n_features))
+    
+    # Constraints
+    constraints = []
+    for t in range(T-1):
+        for s in range(n_states):
+            for a in range(n_actions):
+                idx = s + a * n_states
+                constraints.append(r[t, idx] == cp.log(pi[t, s, a]) + nu[t, s] - gamma * (P[a][s, :] @ nu[t+1, :]))
+                # constraints.append(r[t, idx] == U[idx, :] @ alpha[t, :])
+    
+    for s in range(n_states):
+        for a in range(n_actions):
+            idx = s + a * n_states
+            constraints.append(r[T-1, idx] == cp.log(pi[T-1, s, a]) + nu[T-1, s])
+            
+    # constraints.append(r[T-1] == true_reward_matrix[T-1])
+
+    # Add constraints for the true reward matrix
+
+    # Objective: Minimize the nuclear norm of the reward matrix
+    objective = cp.Minimize(0)
+    
+    # Solve the problem
+    problem = cp.Problem(objective, constraints)
+    problem.solve(solver=cp.MOSEK, verbose=True)
+    
+    print("Status:", problem.status)
+    
+    return r.value, nu.value
+
 
 def solve_PROBLEM_3(gw, U, sigmas, pi):
     
