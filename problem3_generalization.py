@@ -213,7 +213,7 @@ def generate_weight_trajectories(sigmas, weights0, T):
 if __name__ == "__main__":
     
     # np.random.seed(int(time.time()))
-    # np.random.seed(0)
+    np.random.seed(3)
 
 
     grid_size = 5
@@ -383,7 +383,7 @@ if __name__ == "__main__":
     r_recovered_feasibility, nu_recovered_feasibility = solve_PROBLEM_3_feasibility(gw, U, sigmas, pi)
     r_recovered_feasibility = r_recovered_feasibility.reshape(horizon, gw.n_states, gw.n_actions, order='F')
     rec_weights = pickle.load(open(GEN_DIR_NAME + 
-                                    "/output_data.pickle", 'rb'))['rec_rewards']
+                                    "/output_data_alpha_times_2_comp.pickle", 'rb'))['rec_rewards']
     
     rec_weights_MaxEntIRL = np.load('data/static_MaxEntIRL_reward.npy')
     
