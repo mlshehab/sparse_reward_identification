@@ -267,9 +267,9 @@ class BlockedGridWorld(BasicGridWorld):
 
 
 
-class FrozenGridWorld(BasicGridWorld):
+class StickyGridWorld(BasicGridWorld):
     """
-    Slippery Gridworld MDP.
+    Sticky Gridworld MDP.
     """
 
     def __init__(self, grid_size, wind, discount, horizon, reward):
@@ -279,9 +279,8 @@ class FrozenGridWorld(BasicGridWorld):
         discount: MDP discount. float.
         horizon: Time horizon. int.
         reward: Reward structure.
-        slip_probability: Probability of slipping to a random adjacent state. float.
         """
-        self.frozen_states = [7,16,18]
+        self.sticky_states = [7,16,18]
         super().__init__(grid_size, wind, discount, horizon, reward)
         
         
@@ -337,7 +336,7 @@ class FrozenGridWorld(BasicGridWorld):
             return 0.0
 
         # Swamp effect: if in a swamp, higher probability of staying in place
-        if i in self.frozen_states:
+        if i in self.sticky_states:
             if k == i:  # Stay in place with higher probability
                 return 0.8 
             else:

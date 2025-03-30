@@ -85,14 +85,13 @@ def optimal_ratio(true, recovered):
     result = minimize(loss, 1.0)  # Initial guess is 1.0
     return result.x[0]  # Optimal ratio
 
-def plot_time_varying_weights(true_weights, rw_simple, rw_feasibility, rw_ashwood, T):
+def plot_time_varying_weights(true_weights, rw_simple, rw_ashwood, T):
     """
-    Plots the time-varying weights for the home state and water state, comparing true and recovered weights using the simple method, feasibility method, and Ashwood et al. method.
+    Plots the time-varying weights for the home state and water state, comparing true and recovered weights using the simple method and Ashwood et al. method.
 
     Parameters:
     - true_weights: numpy array of shape (T, num_maps), the true time-varying weights
     - rw_simple: numpy array of shape (T, num_maps), the recovered time-varying weights using the simple method
-    - rw_feasibility: numpy array of shape (T, num_maps), the recovered time-varying weights using the feasibility method
     - rw_ashwood: numpy array of shape (T, num_maps), the recovered time-varying weights using the Ashwood et al. method
     - T: int, number of time steps
     """
@@ -107,33 +106,26 @@ def plot_time_varying_weights(true_weights, rw_simple, rw_feasibility, rw_ashwoo
     # Standardize
     standardized_true_home = (true_weights[:, 0] - np.mean(true_weights[:, 0])) / np.std(true_weights[:, 0])
     standardized_simple_home = (rw_simple[:, 0] - np.mean(rw_simple[:, 0])) / np.std(rw_simple[:, 0])
-    standardized_feasibility_home = (rw_feasibility[:, 0] - np.mean(rw_feasibility[:, 0])) / np.std(rw_feasibility[:, 0])
     standardized_ashwood_home = (rw_ashwood[:, 0] - np.mean(rw_ashwood[:, 0])) / np.std(rw_ashwood[:, 0])
     standardized_true_water = (true_weights[:, 1] - np.mean(true_weights[:, 1])) / np.std(true_weights[:, 1])
     standardized_simple_water = (rw_simple[:, 1] - np.mean(rw_simple[:, 1])) / np.std(rw_simple[:, 1])
-    standardized_feasibility_water = (rw_feasibility[:, 1] - np.mean(rw_feasibility[:, 1])) / np.std(rw_feasibility[:, 1])
     standardized_ashwood_water = (rw_ashwood[:, 1] - np.mean(rw_ashwood[:, 1])) / np.std(rw_ashwood[:, 1])
 
     # Calculate RMS errors
     rms_error_simple_home = np.sqrt(np.mean((standardized_true_home - standardized_simple_home) ** 2))
-    rms_error_feasibility_home = np.sqrt(np.mean((standardized_true_home - standardized_feasibility_home) ** 2))
     rms_error_ashwood_home = np.sqrt(np.mean((standardized_true_home - standardized_ashwood_home) ** 2))
     rms_error_simple_water = np.sqrt(np.mean((standardized_true_water - standardized_simple_water) ** 2))
-    rms_error_feasibility_water = np.sqrt(np.mean((standardized_true_water - standardized_feasibility_water) ** 2))
     rms_error_ashwood_water = np.sqrt(np.mean((standardized_true_water - standardized_ashwood_water) ** 2))
 
     print(f"RMS Error for Home State (Simple Method): {rms_error_simple_home}")
-    print(f"RMS Error for Home State (Feasibility Method): {rms_error_feasibility_home}")
     print(f"RMS Error for Home State (Ashwood Method): {rms_error_ashwood_home}")
     print(f"RMS Error for Water State (Simple Method): {rms_error_simple_water}")
-    print(f"RMS Error for Water State (Feasibility Method): {rms_error_feasibility_water}")
     print(f"RMS Error for Water State (Ashwood Method): {rms_error_ashwood_water}")
 
     # Plotting
     plt.subplot(2, 1, 1)
     plt.plot(range(T), standardized_true_home, label=r'\textbf{True Reward at Home State}',  linewidth=4)
     plt.plot(range(T), standardized_simple_home, label=r'\textbf{Recovered Reward at Home State (P3)}', linewidth=3)
-    plt.plot(range(T), standardized_feasibility_home, label=r'\textbf{Recovered Reward at Home State (Feasibility)}', linestyle=':', linewidth=2)
     plt.plot(range(T), standardized_ashwood_home, label=r'\textbf{dynamic\_irl (Ashwood et al., 2022) at Home State}', linewidth=3)
     plt.xlabel(r'\textbf{Time}', fontsize=24)
     plt.ylabel(r'\textbf{Weight}', fontsize=24)
@@ -144,7 +136,6 @@ def plot_time_varying_weights(true_weights, rw_simple, rw_feasibility, rw_ashwoo
     plt.subplot(2, 1, 2)
     plt.plot(range(T), standardized_true_water, label=r'\textbf{True Reward at Water State}',  linewidth=4)
     plt.plot(range(T), standardized_simple_water, label=r'\textbf{Recovered Reward at Water State (P3)}',  linewidth=3)
-    plt.plot(range(T), standardized_feasibility_water, label=r'\textbf{Recovered Reward at Water State (Feasibility)}', linestyle=':', linewidth=2)
     plt.plot(range(T), standardized_ashwood_water, label=r'\textbf{dynamic\_irl (Ashwood et al., 2022) at Water State}',  linewidth=3)
     plt.xlabel(r'\textbf{Time}', fontsize=24)
     plt.ylabel(r'\textbf{Weight}', fontsize=24)
@@ -330,7 +321,7 @@ if __name__ == "__main__":
     rw_simple = get_coordinates_wrt_row_basis(r_recovered, np.dot(basis_simple, P_simple))
     rw_feasibility = get_coordinates_wrt_row_basis(r_recovered_feasibility, np.dot(basis_simple_feasibility, P_simple_feasibility))
    
-    plot_time_varying_weights(time_varying_weights,  rw_simple,rw_feasibility, rw_ashwood, T)
+    plot_time_varying_weights(time_varying_weights,  rw_simple, rw_ashwood, T)
     
 
     # projected_features = np.dot(basis_simple, P_simple)

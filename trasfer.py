@@ -1,4 +1,4 @@
-from dynamics import BasicGridWorld, BlockedGridWorld, FrozenGridWorld
+from dynamics import BasicGridWorld, BlockedGridWorld, StickyGridWorld
 from utils.bellman import soft_bellman_operation
 # from solvers import solve_milp
 from utils.bellman import state_only_soft_bellman_operation, soft_bellman_operation, time_varying_value_iteration
