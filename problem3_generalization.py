@@ -1,6 +1,7 @@
 from dynamics import BasicGridWorld, BlockedGridWorld
 from utils.bellman import soft_bellman_operation
 from noisy_solvers import solve_PROBLEM_3_noisy
+from solvers import solve_PROBLEM_3_feasibility
 # from solvers import solve_milp
 from utils.bellman import state_only_soft_bellman_operation, soft_bellman_operation, time_varying_value_iteration
 import numpy as np
@@ -377,10 +378,15 @@ if __name__ == "__main__":
     r_recovered, nu_recovered = solve_PROBLEM_3_noisy(gw, U, sigmas, pi_hat, b)
     r_recovered = r_recovered.reshape(horizon, gw.n_states, gw.n_actions, order='F')
 
+
+
+    r_recovered_feasibility, nu_recovered_feasibility = solve_PROBLEM_3_feasibility(gw, U, sigmas, pi)
+    r_recovered_feasibility = r_recovered_feasibility.reshape(horizon, gw.n_states, gw.n_actions, order='F')
     rec_weights = pickle.load(open(GEN_DIR_NAME + 
                                     "/output_data.pickle", 'rb'))['rec_rewards']
     
     rec_weights_MaxEntIRL = np.load('data/static_MaxEntIRL_reward.npy')
+    
 
 
     # print(rec_weights.shape)
@@ -404,6 +410,7 @@ if __name__ == "__main__":
     _, _, pi_recovered_2  = soft_bellman_operation(gw2, r_recovered)
     _, _, pi_recovered_ashwood = soft_bellman_operation(gw2, r_recovered_ashwood)
     _, _, pi_recovered_MaxEntIRL = soft_bellman_operation(gw2, r_recovered_MaxEntIRL)
+    _, _, pi_recovered_feasibility = soft_bellman_operation(gw2, r_recovered_feasibility)
     # _, _, pi_hat_hat = soft_bellman_operation(gw, r_recovered)
 
     P = np.asarray(gw2.P, dtype=np.float64)     # shape (A, S, S)
@@ -416,6 +423,7 @@ if __name__ == "__main__":
     pi2_likelihood = compute_likelihood(pi2, visit_counts_val, action_counts_val)
     pi_recovered_ashwood_likelihood = compute_likelihood(pi_recovered_ashwood, visit_counts_val, action_counts_val)
     pi_recovered_MaxEntIRL_likelihood = compute_likelihood(pi_recovered_MaxEntIRL, visit_counts_val, action_counts_val)
+    pi_recovered_feasibility_likelihood = compute_likelihood(pi_recovered_feasibility, visit_counts_val, action_counts_val)
     uniform_likelihood = compute_likelihood(np.ones_like(pi2)/gw2.n_actions, visit_counts_val, action_counts_val)
 
     print("Log likelihoods")
@@ -425,6 +433,7 @@ if __name__ == "__main__":
     print("Pi Double Hat: ", pi_hat_hat_likelihood)
     print("Pi Recovered Ashwood: ", pi_recovered_ashwood_likelihood)
     print("Pi Recovered MaxEntIRL: ", pi_recovered_MaxEntIRL_likelihood)
+    print("Pi Recovered Feasibility: ", pi_recovered_feasibility_likelihood)
     print("Uniform Policy: ", uniform_likelihood)
 
     

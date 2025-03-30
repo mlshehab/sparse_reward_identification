@@ -269,7 +269,7 @@ if __name__ == "__main__":
     # Solve the problem with RTH method
     r_recovered, nu_recovered = solve_PROBLEM_3(gw, U, sigmas, pi)
     r_recovered_feasibility, nu_recovered_feasibility = solve_PROBLEM_3_feasibility(gw, U, sigmas, pi)
-    
+    np.save('data/r_recovered_feasibility.npy', r_recovered_feasibility)
 
    
   
