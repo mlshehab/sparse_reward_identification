@@ -84,17 +84,7 @@ class BasicGridWorld(object):
 
         return abs(i[0] - k[0]) + abs(i[1] - k[1]) <= 1
     
-    def reward(self, state_int):
-        """
-        Reward for being in state state_int.
 
-        state_int: State integer. int.
-        -> Reward.
-        """
-
-        if state_int == self.n_states - 1:
-            return 1
-        return 0
         
     def _transition_probability(self, i, j, k):
         """
@@ -165,64 +155,10 @@ class BasicGridWorld(object):
             normalized_P = P/sum_P[:,None]
             self.transition_probability[:,a,:] = normalized_P
             
-    
-    def make_state_determinstic(self, s):
-        
-        for s_prime in range(self.n_states):
-            for a in range(self.n_actions):
-                self.transition_probability[s,a,s_prime] = 0.0
-                
-        for a in range(self.n_actions):
-            self.transition_probability[s,a,s-1] = 1.0
-         
+ 
             
-    def construct_Xi(self, pi):
-        horizon, n_states, n_actions = pi.shape
-    
-        Xi = np.zeros((horizon*n_states*n_actions,1))
-        
-        for t in range(horizon):
-            curr_pi = pi[t].flatten('F')[:,None]
-    #         print(curr_pi.shape)
-            # next_pi = pi[t+1].flatten('F')[:,None]
-            Xi[t*n_states*n_actions:(t+1)*n_states*n_actions] = np.log(curr_pi) 
-        return Xi    
-    
-    def prune_Gamma_and_Xi(self, pi):
-        Reach, UnReach = self.get_reachable_tube()
-        n_unreach_states = []
-        total_unreach_states = set(UnReach[str(0)])
 
-        Gamma = self.construct_Gamma()
-        # print(Gamma.shape)
-        Xi = self.construct_Xi(pi)
-
-        remove_indices = []
-
-        for t in range(self.horizon):
-            UnReach_t = UnReach[str(t)]
-            if t > 1:
-                total_unreach_states = total_unreach_states.intersection(set(UnReach_t))
-                n_unreach_states.append(len(total_unreach_states))
-            # print(UnReach_t)
-            for unreachable_state in UnReach_t:
-                for a in range(self.n_actions):
-                    remove_indices.append(  t*self.n_states*self.n_actions + (self.n_states*a + unreachable_state)) 
-
-        # print(remove_indices)
-        # print("len:", len(remove_indices))
-        Gamma = np.delete(Gamma,obj = remove_indices, axis = 0)
-        Xi = np.delete(Xi, obj = remove_indices, axis = 0 )                
-        return Gamma, Xi , n_unreach_states
-
-
-    def compute_projected_kernel(self,Gamma):
-        K = scipy.linalg.null_space(Gamma)
-        projected_K = K[:self.n_states*self.n_actions,:]
-        # print("The shape of projeted matrix is: ", projected_K.shape)
-        # print("The rank of projected K is: ", np.linalg.matrix_rank(projected_K))    
-        return np.linalg.matrix_rank(projected_K)
-
+   
     def reset(self,start_state):
         self.state = start_state
 
