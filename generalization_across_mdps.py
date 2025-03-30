@@ -9,14 +9,15 @@ from gurobipy import GRB
 
 from solvers import solve_greedy_backward_bisection_smaller
 from noisy_solvers import solve_milp_noisy, solve_greedy_backward_bisection_noisy, solve_greedy_backward_bisection_smaller_noisy#, solve_greedy_backward_alpha
-from new_mdps import SlipperyGridWorld 
-from dynamics import BasicGridWorld
+# from new_mdps import SlipperyGridWorld 
+from dynamics import BasicGridWorld, BlockedGridWorld
 from utils.bellman import soft_bellman_operation
-
-from utils.sample import estimate_pi_and_visits_numba, compute_likelihood, generate_and_save_rewards
+from utils.reward_generators import generate_and_save_rewards_skewed, generate_and_save_rewards_problem3_like
+from utils.sample import estimate_pi_and_visits_numba, compute_likelihood
 
 NUMBER_OF_EXPERIMENTS = 1
 # NUMBER_OF_FEATURES = 7
+
 
 
 def check_feasibility(gw, pi, r, nu, b):
@@ -63,7 +64,7 @@ def compute_error_bound(gw, delta, visit_counts, pi_hat):
 
         # Assert all alpha values are positive where visited
         visited_mask_3d = np.broadcast_to(visited_mask[:, :, np.newaxis], alpha.shape)
-        print(alpha.min())
+        print(f"{alpha.min()=}")
         assert np.all(alpha[visited_mask_3d] > 0), "Alpha contains non-positive values!"
 
         # Avoid division by zero or negative alpha values
@@ -100,7 +101,7 @@ def compare_likelihood_experiment(num_trajectories, seed):
     horizon = 100
     # reward = 1
     np.random.seed(seed)
-    reward_path = f"data/rewards/reward_{seed}_{number_of_switches}.npy"
+    reward_path = f"data/rewards/reward_lowrank_{seed}_{number_of_switches}.npy"
 
     gw = BasicGridWorld(grid_size, wind, discount, horizon, None)
     # now obtain time-varying reward maps
@@ -118,7 +119,7 @@ def compare_likelihood_experiment(num_trajectories, seed):
 
     P = np.asarray(gw.P, dtype=np.float64)     # shape (A, S, S)
     pi = np.asarray(pi, dtype=np.float64)   # shape (H, S, A)
-    action_counts, visit_counts = estimate_pi_and_visits_numba(P, pi, gw.horizon, 100_000)
+    action_counts, visit_counts = estimate_pi_and_visits_numba(P, pi, gw.horizon, num_trajectories)
 
     if (visit_counts == 0).any():
         print("Still there are t,s pairs not visited")
@@ -137,7 +138,7 @@ def compare_likelihood_experiment(num_trajectories, seed):
     assert check_feasibility(gw, pi_hat, r_greedy, nu_greedy, b)
 
 
-    gw2 = SlipperyGridWorld(grid_size, 0, discount, horizon, None, True)
+    gw2 = BlockedGridWorld(grid_size, wind, discount, horizon, None)
     _, _, pi2 = soft_bellman_operation(gw2, reward)
     _, _, pi_recovered_2  = soft_bellman_operation(gw2, r_greedy)
 
@@ -149,6 +150,7 @@ def compare_likelihood_experiment(num_trajectories, seed):
     pi_hat_likelihood = compute_likelihood(pi_hat, visit_counts_val, action_counts_val)
     pi_likelihood = compute_likelihood(pi, visit_counts_val, action_counts_val)
     pi2_likelihood = compute_likelihood(pi2, visit_counts_val, action_counts_val)
+    uniform_likelihood = compute_likelihood(np.ones_like(pi2)/gw2.n_actions, visit_counts_val, action_counts_val)
 
     print("Log likelihoods")
     print("True Policy: ", pi_likelihood)
@@ -156,7 +158,7 @@ def compare_likelihood_experiment(num_trajectories, seed):
     print("Estimate Policy: ", pi_hat_likelihood)
     print("Reconstructed Policy: ", pi_hat_hat_likelihood)
 
-    return (pi_likelihood, pi_hat_likelihood, pi_hat_hat_likelihood, pi2_likelihood)
+    return (pi_likelihood, pi_hat_likelihood, pi_hat_hat_likelihood, pi2_likelihood, uniform_likelihood)
 
 
 
@@ -174,11 +176,11 @@ def wrapper(x, y, queue):
 
 if __name__ == "__main__":
     # Define your input lists
-    seed_list = [11, 12, 13]
-    num_traj_list = [300_000, 800_000]
+    seed_list = [15, 16, 17]
+    num_traj_list = [20_000_000]
 
     for seed in seed_list:
-        generate_and_save_rewards(seed, 100, 1)
+        generate_and_save_rewards_problem3_like(seed, 100, 1)
 
     # Create Cartesian product of parameters
     arg_list = list(product(num_traj_list, seed_list))
@@ -215,3 +217,5 @@ if __name__ == "__main__":
         print(f"  Mean pi_hat_likelihood   = {means[1]:.4f}")
         print(f"  Mean pi_hat_hat_likelihood = {means[2]:.4f}")
         print(f"  Mean pi2_likelihood = {means[3]:.4f}")
+        print(f"  Mean Uniform Likelihood = {means[4]:.4f}")
+

@@ -231,7 +231,7 @@ if __name__ == "__main__":
     T = horizon
     GAMMA = 0.9
    
-    num_trajectories = 200_000
+    num_trajectories = 50_000_000
 
 
     # select number of maps
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     # construct U
     U = np.zeros(shape=(gw.n_states*gw.n_actions, n_features))
 
-    REWARD_SCALE = 1.
+    REWARD_SCALE = 2.
     U[HOME_STATE, 0] = 1.0* REWARD_SCALE
     U[HOME_STATE + gw.n_states, 0] = 1.0* REWARD_SCALE
     U[HOME_STATE + 2*gw.n_states, 0] = 1.0* REWARD_SCALE
@@ -382,14 +382,18 @@ if __name__ == "__main__":
 
 
     # print(rec_weights.shape)
-    r_recovered_ashwood = np.zeros((gw.horizon, gw.n_states * gw.n_actions))
+    r_recovered_ashwood = np.zeros((gw.horizon, gw.n_states, gw.n_actions))
+
+    # for t in range(gw.horizon):
+    #     for s in range(gw.n_states):
+    #         for a in range(gw.n_actions):
+    #             r_recovered_ashwood[t, s ,a] = U[s + a * gw.n_states,0] * time_varying_weights[t,0] \
+    #                     + U[s + a * gw.n_states, 1] * time_varying_weights[t,1]
 
     for t in range(gw.horizon):
-        for s in range(gw.n_states):
-            for a in range(gw.n_actions):
-                r_recovered_ashwood[t, s ,a] = U[s + a * gw.n_states,0] * time_varying_weights[t,0] \
-                        + U[s + a * gw.n_states, 1] * time_varying_weights[t,1]
-
+            for s in range(gw.n_states):
+                for a in range(gw.n_actions):
+                    r_recovered_ashwood[t, s ,a] = rec_weights[t, s]
 
 
 
