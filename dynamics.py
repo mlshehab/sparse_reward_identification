@@ -265,3 +265,104 @@ class BlockedGridWorld(BasicGridWorld):
             Pa = self.transition_probability[:,a,:]
             self.P.append(Pa)
 
+
+
+class FrozenGridWorld(BasicGridWorld):
+    """
+    Slippery Gridworld MDP.
+    """
+
+    def __init__(self, grid_size, wind, discount, horizon, reward):
+        """
+        grid_size: Grid size. int.
+        wind: Chance of moving randomly. float.
+        discount: MDP discount. float.
+        horizon: Time horizon. int.
+        reward: Reward structure.
+        slip_probability: Probability of slipping to a random adjacent state. float.
+        """
+        self.frozen_states = [7,16,18]
+        super().__init__(grid_size, wind, discount, horizon, reward)
+        
+        
+        # Block certain state transitions
+        # action_up = self.action_dict["up"]
+
+        for a in range(self.n_actions):
+            self.transition_probability[0, a, 5] = 0.0
+            self.transition_probability[5, a, 0] = 0.0
+            self.transition_probability[1, a, 6] = 0.0
+            self.transition_probability[6, a, 1] = 0.0
+            self.transition_probability[2, a, 7] = 0.0
+            self.transition_probability[7, a, 2] = 0.0
+
+
+            self.transition_probability[10, a, 11] = 0.0
+            self.transition_probability[11, a, 10] = 0.0
+            self.transition_probability[16, a, 15] = 0.0
+            self.transition_probability[15, a, 16] = 0.0
+            self.transition_probability[16, a, 21] = 0.0
+            self.transition_probability[21, a, 16] = 0.0
+            self.transition_probability[17, a, 22] = 0.0
+            self.transition_probability[22, a, 17] = 0.0
+            self.transition_probability[18, a, 23] = 0.0
+            self.transition_probability[23, a, 18] = 0.0
+         
+         
+            
+        self.normalize_transition_matrices()
+
+        self.P = []
+        for a in range(self.n_actions):
+            Pa = self.transition_probability[:,a,:]
+            self.P.append(Pa)
+
+
+
+    def _transition_probability(self, i, j, k):
+        """
+        Get the probability of transitioning from state i to state k given action j.
+
+        i: State int.
+        j: Action int.
+        k: State int.
+        -> p(s_k | s_i, a_j)
+        """
+
+        xi, yi = self.int_to_point(i)
+        xj, yj = self.actions[j]
+        xk, yk = self.int_to_point(k)
+
+        if not self.neighbouring((xi, yi), (xk, yk)):
+            return 0.0
+
+        # Swamp effect: if in a swamp, higher probability of staying in place
+        if i in self.frozen_states:
+            if k == i:  # Stay in place with higher probability
+                return 0.8 
+            else:
+                return 0.2 / (self.n_actions - 1)  # Distribute small probability to moves
+
+        # Normal transition dynamics
+        if (xi + xj, yi + yj) == (xk, yk):
+            base_prob = 1 - self.wind + self.wind / self.n_actions
+            return base_prob
+
+        # Wind-induced movement
+        if (xi, yi) != (xk, yk):
+            return self.wind / self.n_actions
+
+        # Handling corners and edges as before
+        if (xi, yi) in {(0, 0), (self.grid_size-1, self.grid_size-1),
+                        (0, self.grid_size-1), (self.grid_size-1, 0)}:
+            if not (0 <= xi + xj < self.grid_size and 0 <= yi + yj < self.grid_size):
+                return 1 - self.wind + 2 * self.wind / self.n_actions
+            else:
+                return 2 * self.wind / self.n_actions
+        else:
+            if (xi not in {0, self.grid_size-1} and yi not in {0, self.grid_size-1}):
+                return 0.0
+            if not (0 <= xi + xj < self.grid_size and 0 <= yi + yj < self.grid_size):
+                return 1 - self.wind + self.wind / self.n_actions
+            else:
+                return self.wind / self.n_actions

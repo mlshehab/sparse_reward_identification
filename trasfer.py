@@ -1,4 +1,4 @@
-from dynamics import BasicGridWorld, BlockedGridWorld
+from dynamics import BasicGridWorld, BlockedGridWorld, FrozenGridWorld
 from utils.bellman import soft_bellman_operation
 # from solvers import solve_milp
 from utils.bellman import state_only_soft_bellman_operation, soft_bellman_operation, time_varying_value_iteration
@@ -196,56 +196,66 @@ if __name__ == "__main__":
     print("time_varying_weights", time_varying_weights.shape)
 
     # gw1 = BasicGridWorld(grid_size, wind, GAMMA, horizon, 0)
-    bgw = BasicGridWorld(grid_size, wind, GAMMA, horizon, 0)
-    np.save("results/problem3/gw_P.npy", bgw.P)
+    # bgw = BasicGridWorld(grid_size, wind, GAMMA, horizon, 0)
+    fgw = FrozenGridWorld(grid_size, wind, GAMMA, horizon, 0)
+
+    for state in range(fgw.n_states):
+        for action in range(fgw.n_actions):
+            next_states = np.where(fgw.transition_probability[state, action] > 0)[0]
+            for next_state in next_states:
+                prob = fgw.transition_probability[state, action, next_state]
+                print(f"State: {state}, Action: {fgw.action_dict_inverse[action]}, Next State: {next_state}, Probability: {prob:.4f}")
+
+
+    # np.save("results/problem3/gw_P.npy", bgw.P)
     
 
 
-    # # print("gw.horizon", gw.horizon)
-    # # print("gw.horizon", gw.horizon)
-    # construct U
-    U = np.zeros(shape=(bgw.n_states*bgw.n_actions, n_features))
+    # # # print("gw.horizon", gw.horizon)
+    # # # print("gw.horizon", gw.horizon)
+    # # construct U
+    # U = np.zeros(shape=(bgw.n_states*bgw.n_actions, n_features))
 
-    U[HOME_STATE, 0] = 1.0
-    U[HOME_STATE + bgw.n_states, 0] = 1.0
-    U[HOME_STATE + 2*bgw.n_states, 0] = 1.0
-    U[HOME_STATE + 3*bgw.n_states, 0] = 1.0
-    U[HOME_STATE + 4*bgw.n_states, 0] = 1.0
+    # U[HOME_STATE, 0] = 1.0
+    # U[HOME_STATE + bgw.n_states, 0] = 1.0
+    # U[HOME_STATE + 2*bgw.n_states, 0] = 1.0
+    # U[HOME_STATE + 3*bgw.n_states, 0] = 1.0
+    # U[HOME_STATE + 4*bgw.n_states, 0] = 1.0
 
-    U[WATER_STATE, 1] = 1.0
-    U[WATER_STATE + bgw.n_states, 1] = 1.0
-    U[WATER_STATE + 2*bgw.n_states, 1] = 1.0
-    U[WATER_STATE + 3*bgw.n_states, 1] = 1.0
-    U[WATER_STATE + 4*bgw.n_states, 1] = 1.0
+    # U[WATER_STATE, 1] = 1.0
+    # U[WATER_STATE + bgw.n_states, 1] = 1.0
+    # U[WATER_STATE + 2*bgw.n_states, 1] = 1.0
+    # U[WATER_STATE + 3*bgw.n_states, 1] = 1.0
+    # U[WATER_STATE + 4*bgw.n_states, 1] = 1.0
 
 
 
-    true_reward = np.zeros(shape=(bgw.horizon, bgw.n_states, bgw.n_actions))
-    # print("true_reward", true_reward.shape, "time_varying_weights", time_varying_weights.shape)
-    for t in range(bgw.horizon):
-        for s in range(bgw.n_states):
-             for a in range(bgw.n_actions):
-                    true_reward[t, s, a] = U[s + a * bgw.n_states,0] * time_varying_weights[t,0] \
-                        + U[s + a * bgw.n_states, 1] * time_varying_weights[t,1] 
-                        # + U[s + a * gw1.n_states, 2] * time_varying_weights[t,2]
-                    if t == horizon - 1:
-                        true_reward[t, s, a] *= 100
+    # true_reward = np.zeros(shape=(bgw.horizon, bgw.n_states, bgw.n_actions))
+    # # print("true_reward", true_reward.shape, "time_varying_weights", time_varying_weights.shape)
+    # for t in range(bgw.horizon):
+    #     for s in range(bgw.n_states):
+    #          for a in range(bgw.n_actions):
+    #                 true_reward[t, s, a] = U[s + a * bgw.n_states,0] * time_varying_weights[t,0] \
+    #                     + U[s + a * bgw.n_states, 1] * time_varying_weights[t,1] 
+    #                     # + U[s + a * gw1.n_states, 2] * time_varying_weights[t,2]
+    #                 if t == horizon - 1:
+    #                     true_reward[t, s, a] *= 100
                         
     
-    true_reward_matrix = np.zeros((bgw.horizon, bgw.n_states * bgw.n_actions))
+    # true_reward_matrix = np.zeros((bgw.horizon, bgw.n_states * bgw.n_actions))
 
-    for t in range(bgw.horizon):
-        for s in range(bgw.n_states):
-            for a in range(bgw.n_actions):
-                idx = s + a * bgw.n_states
-                true_reward_matrix[t, idx] = (
-                    U[idx, 0] * time_varying_weights[t, 0] +
-                    U[idx, 1] * time_varying_weights[t, 1]
-                )
+    # for t in range(bgw.horizon):
+    #     for s in range(bgw.n_states):
+    #         for a in range(bgw.n_actions):
+    #             idx = s + a * bgw.n_states
+    #             true_reward_matrix[t, idx] = (
+    #                 U[idx, 0] * time_varying_weights[t, 0] +
+    #                 U[idx, 1] * time_varying_weights[t, 1]
+    #             )
   
-    V, Q, pi = soft_bellman_operation(bgw, true_reward)
-    start_state = 7
-    traj = bgw.simulate_trajectory(7, pi)
-    # print(traj)
-    bgw.visualize_trajectory(traj)
+    # V, Q, pi = soft_bellman_operation(bgw, true_reward)
+    # start_state = 7
+    # traj = bgw.simulate_trajectory(7, pi)
+    # # print(traj)
+    # bgw.visualize_trajectory(traj)
 

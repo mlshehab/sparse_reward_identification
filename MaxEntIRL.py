@@ -80,7 +80,7 @@ class MaxEntIRL:
     def compute_expected_features(self, policy):
         # Forward calculation of state visitation frequencies
         D = np.zeros((self.horizon+1, self.n_states))
-        D[0, 0] = 1.0  # Start at state 0
+        D[0, :] = 1.0 / self.n_states  # Uniform start across all states
         
         for h in range(self.horizon):
             for s in range(self.n_states):
@@ -123,14 +123,14 @@ env = BasicGridWorld(
 )
 
 # Generate expert trajectories using soft optimal policy
-expert_gen = ExpertPolicyGenerator(env)
+# expert_gen = ExpertPolicyGenerator(env)
 # soft_optimal_policy = expert_gen.compute_soft_optimal_policy(gt_reward)
 soft_optimal_policy = np.load('pi_expert.npy')
 # print(soft_optimal_policy.shape)
 expert_trajs = []
-for _ in range(50):
+for _ in range(1000):
     traj = []
-    state = 0  # Start at (0,0)
+    state = np.random.randint(0, env.n_states)  # Sample any state in the grid
     for h in range(horizon):
         action = np.random.choice(env.n_actions, p=soft_optimal_policy[h, state])
         traj.append((state, action))
