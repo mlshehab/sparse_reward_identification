@@ -1,4 +1,4 @@
-from dynamics import BasicGridWorld, BlockedGridWorld
+from dynamics import BasicGridWorld, BlockedGridWorld, StickyGridWorld
 from utils.bellman import soft_bellman_operation
 from noisy_solvers import solve_PROBLEM_3_noisy
 from solvers import solve_PROBLEM_3_feasibility
@@ -15,6 +15,7 @@ import os
 from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
+
 
 from utils.sample import estimate_pi_and_visits_numba, compute_likelihood
 
@@ -213,7 +214,7 @@ def generate_weight_trajectories(sigmas, weights0, T):
 if __name__ == "__main__":
     
     # np.random.seed(int(time.time()))
-    np.random.seed(3)
+    np.random.seed(1)
 
 
     grid_size = 5
@@ -406,37 +407,39 @@ if __name__ == "__main__":
 
 
     gw2 = BlockedGridWorld(grid_size, wind, GAMMA, horizon, None)
-    _, _, pi2 = soft_bellman_operation(gw2, true_reward)
-    _, _, pi_recovered_2  = soft_bellman_operation(gw2, r_recovered)
-    _, _, pi_recovered_ashwood = soft_bellman_operation(gw2, r_recovered_ashwood)
-    _, _, pi_recovered_MaxEntIRL = soft_bellman_operation(gw2, r_recovered_MaxEntIRL)
-    _, _, pi_recovered_feasibility = soft_bellman_operation(gw2, r_recovered_feasibility)
-    # _, _, pi_hat_hat = soft_bellman_operation(gw, r_recovered)
+    gw3 = StickyGridWorld(grid_size, wind, GAMMA, horizon, None)
+    for label, env in zip(["Blocked", "Sticky"],[gw2,gw3]): 
+        print(f"For env: {label}")
+        _, _, pi2 = soft_bellman_operation(env, true_reward)
+        _, _, pi_recovered_2  = soft_bellman_operation(env, r_recovered)
+        _, _, pi_recovered_ashwood = soft_bellman_operation(env, r_recovered_ashwood)
+        _, _, pi_recovered_MaxEntIRL = soft_bellman_operation(env, r_recovered_MaxEntIRL)
+        _, _, pi_recovered_feasibility = soft_bellman_operation(env, r_recovered_feasibility)
+        # _, _, pi_hat_hat = soft_bellman_operation(gw, r_recovered)
+        P = np.asarray(env.P, dtype=np.float64)     # shape (A, S, S)
+        pi2 = np.asarray(pi2, dtype=np.float64)   # shape (H, S, A)
+        action_counts_val, visit_counts_val = estimate_pi_and_visits_numba(P, pi2, env.horizon, 10)
 
-    P = np.asarray(gw2.P, dtype=np.float64)     # shape (A, S, S)
-    pi2 = np.asarray(pi2, dtype=np.float64)   # shape (H, S, A)
-    action_counts_val, visit_counts_val = estimate_pi_and_visits_numba(P, pi2, gw2.horizon, 10)
+        pi_hat_hat_likelihood = compute_likelihood(pi_recovered_2, visit_counts_val, action_counts_val)
+        pi_hat_likelihood = compute_likelihood(pi_hat, visit_counts_val, action_counts_val)
+        pi_likelihood = compute_likelihood(pi, visit_counts_val, action_counts_val)
+        pi2_likelihood = compute_likelihood(pi2, visit_counts_val, action_counts_val)
+        pi_recovered_ashwood_likelihood = compute_likelihood(pi_recovered_ashwood, visit_counts_val, action_counts_val)
+        pi_recovered_MaxEntIRL_likelihood = compute_likelihood(pi_recovered_MaxEntIRL, visit_counts_val, action_counts_val)
+        pi_recovered_feasibility_likelihood = compute_likelihood(pi_recovered_feasibility, visit_counts_val, action_counts_val)
+        uniform_likelihood = compute_likelihood(np.ones_like(pi2)/env.n_actions, visit_counts_val, action_counts_val)
 
-    pi_hat_hat_likelihood = compute_likelihood(pi_recovered_2, visit_counts_val, action_counts_val)
-    pi_hat_likelihood = compute_likelihood(pi_hat, visit_counts_val, action_counts_val)
-    pi_likelihood = compute_likelihood(pi, visit_counts_val, action_counts_val)
-    pi2_likelihood = compute_likelihood(pi2, visit_counts_val, action_counts_val)
-    pi_recovered_ashwood_likelihood = compute_likelihood(pi_recovered_ashwood, visit_counts_val, action_counts_val)
-    pi_recovered_MaxEntIRL_likelihood = compute_likelihood(pi_recovered_MaxEntIRL, visit_counts_val, action_counts_val)
-    pi_recovered_feasibility_likelihood = compute_likelihood(pi_recovered_feasibility, visit_counts_val, action_counts_val)
-    uniform_likelihood = compute_likelihood(np.ones_like(pi2)/gw2.n_actions, visit_counts_val, action_counts_val)
+        print("Log likelihoods")
+        print("Pi_1: ", pi_likelihood)
+        print("Pi_2: ", pi2_likelihood)
+        print("Pi Hat: ", pi_hat_likelihood)
+        print("Pi Double Hat: ", pi_hat_hat_likelihood)
+        print("Pi Recovered Ashwood: ", pi_recovered_ashwood_likelihood)
+        print("Pi Recovered MaxEntIRL: ", pi_recovered_MaxEntIRL_likelihood)
+        print("Pi Recovered Feasibility: ", pi_recovered_feasibility_likelihood)
+        print("Uniform Policy: ", uniform_likelihood)
 
-    print("Log likelihoods")
-    print("Pi_1: ", pi_likelihood)
-    print("Pi_2: ", pi2_likelihood)
-    print("Pi Hat: ", pi_hat_likelihood)
-    print("Pi Double Hat: ", pi_hat_hat_likelihood)
-    print("Pi Recovered Ashwood: ", pi_recovered_ashwood_likelihood)
-    print("Pi Recovered MaxEntIRL: ", pi_recovered_MaxEntIRL_likelihood)
-    print("Pi Recovered Feasibility: ", pi_recovered_feasibility_likelihood)
-    print("Uniform Policy: ", uniform_likelihood)
 
-    
 
     # print(rec_weights.shape)
     # print(rec_weights.shape)

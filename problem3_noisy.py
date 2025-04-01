@@ -104,7 +104,7 @@ def plot_time_varying_weights(true_weights, results, rw_ashwood, T):
         "font.family": "serif",  # Use a serif font
         "font.serif": ["Computer Modern"],  # Default LaTeX font
     })
-    plt.figure(figsize=(12, 18))
+    plt.figure(figsize=(20, 8))
  
     standardized_results = []
     # Standardize
@@ -135,27 +135,27 @@ def plot_time_varying_weights(true_weights, results, rw_ashwood, T):
     print(f"RMS Error for Water State (Ashwood Method): {rms_error_ashwood_water}")
 
     # Plotting
-    plt.subplot(2, 1, 1)
-    plt.plot(range(T), standardized_true_home, label=r'\textbf{True Reward}', linestyle='-', linewidth=4)
+    plt.subplot(1, 2, 1)
+    plt.plot(range(T), standardized_true_home, label=r'\textbf{True Reward}', linestyle='-', linewidth=5)
     for (label, standardized_simple_home,  _) in standardized_results:
         plt.plot(range(T), standardized_simple_home, label=f"Recovered Reward - {label}", linestyle=':', linewidth=4)
     
-    plt.plot(range(T), standardized_ashwood_home, label=r'\textbf{dynamic\_irl (Ashwood et al., 2022)}', linestyle='-', linewidth=4)
+    plt.plot(range(T), standardized_ashwood_home, label=r'\textbf{dynamic\_irl (Ashwood et al., 2022)}', linestyle='-.', linewidth=2)
     plt.xlabel(r'\textbf{Time}', fontsize=24)
     plt.ylabel(r'\textbf{Weight}', fontsize=24)
-    plt.title(r'\textbf{Time-Varying Weight for Home State (Standardized)}', fontsize=28)
+    plt.title(r'\textbf{Time-Varying Weight for Home State (Standardized)}', fontsize=24)
     plt.legend(fontsize=20)
     plt.grid(True, linestyle='-', alpha=0.7)
 
-    plt.subplot(2, 1, 2)
-    plt.plot(range(T), standardized_true_water, label=r'\textbf{True Reward}', linestyle='-', linewidth=4)
+    plt.subplot(1, 2, 2)
+    plt.plot(range(T), standardized_true_water, label=r'\textbf{True Reward}', linestyle='-', linewidth=5)
     for (label, _,  standardized_simple_water) in standardized_results:
         plt.plot(range(T), standardized_simple_water, label=f"Recovered Reward - {label}", linestyle=':', linewidth=4)
 
-    plt.plot(range(T), standardized_ashwood_water, label=r'\textbf{dynamic\_irl (Ashwood et al., 2022)}', linestyle='-', linewidth=4)
+    plt.plot(range(T), standardized_ashwood_water, label=r'\textbf{dynamic\_irl (Ashwood et al., 2022)}', linestyle='-.', linewidth=2)
     plt.xlabel(r'\textbf{Time}', fontsize=24)
     plt.ylabel(r'\textbf{Weight}', fontsize=24)
-    plt.title(r'\textbf{Time-Varying Weight for Water State (Standardized)}', fontsize=28)
+    plt.title(r'\textbf{Time-Varying Weight for Water State (Standardized)}', fontsize=24)
     plt.legend(fontsize=20)
     plt.grid(True, linestyle='-', alpha=0.7)
 
@@ -258,17 +258,18 @@ if __name__ == "__main__":
     # construct U
     U = np.zeros(shape=(gw.n_states*gw.n_actions, n_features))
 
-    U[HOME_STATE, 0] = 1.0
-    U[HOME_STATE + gw.n_states, 0] = 1.0
-    U[HOME_STATE + 2*gw.n_states, 0] = 1.0
-    U[HOME_STATE + 3*gw.n_states, 0] = 1.0
-    U[HOME_STATE + 4*gw.n_states, 0] = 1.0
+    REWARD_SCALE = 2.
+    U[HOME_STATE, 0] = 1.0* REWARD_SCALE
+    U[HOME_STATE + gw.n_states, 0] = 1.0* REWARD_SCALE
+    U[HOME_STATE + 2*gw.n_states, 0] = 1.0* REWARD_SCALE
+    U[HOME_STATE + 3*gw.n_states, 0] = 1.0* REWARD_SCALE
+    U[HOME_STATE + 4*gw.n_states, 0] = 1.0* REWARD_SCALE
 
-    U[WATER_STATE, 1] = 1.0
-    U[WATER_STATE + gw.n_states, 1] = 1.0
-    U[WATER_STATE + 2*gw.n_states, 1] = 1.0
-    U[WATER_STATE + 3*gw.n_states, 1] = 1.0
-    U[WATER_STATE + 4*gw.n_states, 1] = 1.0
+    U[WATER_STATE, 1] = 1.0* REWARD_SCALE
+    U[WATER_STATE + gw.n_states, 1] = 1.0* REWARD_SCALE
+    U[WATER_STATE + 2*gw.n_states, 1] = 1.0* REWARD_SCALE
+    U[WATER_STATE + 3*gw.n_states, 1] = 1.0* REWARD_SCALE
+    U[WATER_STATE + 4*gw.n_states, 1] = 1.0* REWARD_SCALE
 
     # Desired action
     # desired_action = 4 # stay
@@ -312,7 +313,7 @@ if __name__ == "__main__":
     delta = 1-1e-4
 
     results = []
-    for num_trajectories, label in zip([0, 200_000, 2_000_000], ["True Policy", "200K", "2m"])  :#, 1_000_000]:
+    for num_trajectories, label in zip([0, 30_000_000], ["True Policy", "30M"]):#, 1_000_000]:
 
         if num_trajectories > 0:
             P = np.asarray(gw.P, dtype=np.float64)     # shape (A, S, S)
@@ -354,7 +355,7 @@ if __name__ == "__main__":
             # Assert all alpha values are positive where visited
             visited_mask_3d = np.broadcast_to(visited_mask[:, :, np.newaxis], alpha.shape)
             print(f"{alpha.min()=}")
-            assert np.all(alpha[visited_mask_3d] > 0), "Alpha contains non-positive values!"
+            assert np.all(alpha[visited_mask_3d] > 0), f"Alpha contains non-positive values for {label}!"
 
             # Avoid division by zero or negative alpha values
             safe_mask = visited_mask_3d & (alpha > 0)
@@ -401,9 +402,15 @@ if __name__ == "__main__":
 
     # print(rec_weights.shape)
     rw_ashwood = rec_weights.T
+
+    with open('saved_objects.pkl', 'wb') as f:
+        pickle.dump(time_varying_weights, f)
+        pickle.dump(results, f)
+        pickle.dump(rw_ashwood, f)
+        pickle.dump(T, f)
     
-    plot_time_varying_weights(time_varying_weights,  results, rw_ashwood, T)
-    
+    # plot_time_varying_weights(time_varying_weights,  results, rw_ashwood, T)
+        
 
     # projected_features = np.dot(basis_simple, P_simple)
 
